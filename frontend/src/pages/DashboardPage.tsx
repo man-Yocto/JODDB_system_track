@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { type JobOrder } from '../types';
@@ -14,9 +14,16 @@ export const DashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
   const [jobOrders, setJobOrders] = useState<JobOrder[]>(initialJobOrders);
 
+  // Use useEffect to handle navigation instead of during render
+  useEffect(() => {
+    if (!user) {
+      navigate('/', { replace: true });
+    }
+  }, [user, navigate]);
+
   const handleLogout = useCallback(() => {
     logout();
-    navigate('/');
+    navigate('/', { replace: true });
   }, [logout, navigate]);
 
   const handleUpdateJob = useCallback((jobId: string, details: Partial<JobOrder>) => {
@@ -29,8 +36,8 @@ export const DashboardPage: React.FC = () => {
     );
   }, []);
 
+  // Return null if user is not authenticated (will redirect via useEffect)
   if (!user) {
-    navigate('/');
     return null;
   }
 

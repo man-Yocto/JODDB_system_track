@@ -29,7 +29,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
 
   const login = (username: string, password: string): boolean => {
-    // Check if user exists and password matches
     const userData = mockUsers[username];
     const correctPassword = mockPasswords[username];
 
@@ -46,6 +45,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = () => {
+    // Clear user state immediately
     setUser(null);
   };
 
