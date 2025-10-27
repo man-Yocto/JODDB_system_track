@@ -4,15 +4,22 @@ from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from django.utils import timezone
 from django.db import models # Import models for Q object
-from core.serializers import JobOrderCreateSerializer, JobOrderSerializer, TaskSerializer , UserRegistrationSerializer , PrivilegedUserCreateSerializer
-from core.permissions import IsRoleRequired # Import the custom permission
+from core.serializers import JobOrderCreateSerializer, JobOrderSerializer, TaskSerializer , UserRegistrationSerializer , PrivilegedUserCreateSerializer , InspectionSerializer, SupervisorReviewSerializer
+from core.permissions import IsRoleRequired , IsPlanningEngineer, IsSupervisor # Import the custom permission
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from core.models import User, JobOrder, Device, Task
+from core.models import User, JobOrder, Device, Task , Inspection, SupervisorReview
 from rest_framework.generics import CreateAPIView
 from rest_framework.permissions import AllowAny
+#### Import for notifications
+from core.notifications.utils import create_notification
+from django.db import transaction
+
+# Import our new calculation functions
+from core.metrics import calculations
 
 import datetime
 
@@ -257,3 +264,238 @@ class UserManagementViewSet(viewsets.ModelViewSet):
         """Only Admin and Planning Engineer can manage users."""
         self.permission_classes = [IsAuthenticated, IsRoleRequired(['admin', 'planning'])]
         return [permission() for permission in self.permission_classes]
+    
+# -----------------------------------------------------------
+# 4. Quality Inspection ViewSet (QI Use)
+# -----------------------------------------------------------
+
+class InspectionViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
+    """
+    Viewset for Quality Inspector to perform inspections.
+    """
+    serializer_class = InspectionSerializer
+
+    def get_queryset(self):
+        """
+        Show all inspections AND all tasks that are ready for inspection ('done' or 'pending_qa').
+        NOTE: For simplicity, listing all inspections here.
+        A proper list should filter based on user role/scope.
+        """
+        if self.request.user.role in ['quality', 'admin']:
+            return Inspection.objects.all().select_related('task', 'task__device', 'inspector')
+        return Inspection.objects.none()
+
+    def get_permissions(self):
+        """QI only for create, QI/Supervisor for list."""
+        if self.action == 'create':
+            self.permission_classes = [IsAuthenticated, IsRoleRequired(['quality', 'admin'])]
+        else:
+            self.permission_classes = [IsAuthenticated, IsRoleRequired(['quality', 'supervisor', 'admin'])]
+        return [permission() for permission in self.permission_classes]
+
+    def perform_create(self, serializer):
+        """
+        Saves the inspection and updates the Task status based on the decision,
+        and triggers a notification upon rejection.
+        """
+        decision = serializer.validated_data['decision']
+        task = serializer.validated_data['task_id']
+        
+        with transaction.atomic():
+            # 1. Save the Inspection record
+            inspection = serializer.save(inspector=self.request.user, device=task.device)
+            
+            # 2. Update Task status
+            if decision == 'accepted':
+                # Task moves to the next stage
+                task_new_status = 'pending_supervisor'
+                task.status = task_new_status
+                task.save(update_fields=['status', 'updated_at'])
+            
+            elif decision == 'rejected':
+                # Task goes back to the Technician
+                task_new_status = 'rejected' 
+                task.status = task_new_status
+                task.device.current_status = 'rejected' # Update device status
+                task.save(update_fields=['status', 'updated_at'])
+                task.device.save(update_fields=['current_status', 'last_updated'])
+
+                # 3. TRIGGER NOTIFICATION TO TECHNICIAN
+                if task.technician:
+                    message = f"Task {task.id} on device {task.device.serial_number} was rejected by QI: {inspection.comments[:50]}..."
+                    create_notification( # <--- هنا يتم استخدام الدالة
+                        user_id=task.technician.id,
+                        type='task_rejected',
+                        message=message,
+                        payload={'task_id': task.id, 'job_order_code': task.job_order.order_code}
+                    )
+                
+            # If the task status changes, the JobOrder status might need to be updated as well
+            # (Logic for JobOrder update is complex and left outside the scope of this prompt)
+
+
+# -----------------------------------------------------------
+# 5. Supervisor Review ViewSet (Supervisor Use)
+# -----------------------------------------------------------
+
+class SupervisorReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
+    """
+    Viewset for Supervisor to perform the final review of an inspection.
+    """
+    serializer_class = SupervisorReviewSerializer
+    queryset = SupervisorReview.objects.all().select_related('inspection', 'supervisor')
+    
+    def get_permissions(self):
+        """Supervisor only for create, Supervisor/PE for list."""
+        if self.action == 'create':
+            self.permission_classes = [IsAuthenticated, IsRoleRequired(['supervisor', 'admin'])]
+        else:
+            self.permission_classes = [IsAuthenticated, IsRoleRequired(['supervisor', 'planning', 'admin'])]
+        return [permission() for permission in self.permission_classes]
+    
+    def perform_create(self, serializer):
+        """
+        Saves the review and updates the final Task status based on the decision.
+        """
+        decision = serializer.validated_data['decision']
+        inspection = serializer.validated_data['inspection_id']
+        task = inspection.task # Get the related Task
+        
+        with transaction.atomic():
+            # 1. Save the Review record
+            supervisor_review = serializer.save(supervisor=self.request.user)
+            
+            # 2. Update Task status
+            if decision == 'accepted':
+                # Task is fully completed and accepted
+                task_new_status = 'completed' # Assumes 'completed' is an available choice
+                device_new_status = 'completed'
+            elif decision == 'rejected':
+                # Final rejection, the task/device goes back to the rejected status for follow-up
+                task_new_status = 'rejected' 
+                device_new_status = 'rejected'
+
+            task.status = task_new_status
+            task.save(update_fields=['status', 'updated_at'])
+            
+            # Update Device status based on final review
+            task.device.current_status = device_new_status
+            task.device.save(update_fields=['current_status', 'last_updated'])
+            
+            return supervisor_review
+        
+
+from core.metrics.serializers import TechnicianMetricsSerializer
+
+class TechnicianMetricsView(APIView):
+    """
+    Provides daily performance metrics (Productivity, Efficiency, Utilization)
+    for a specific Technician.
+    
+    Access: Planning Engineer, Supervisor
+    """
+    permission_classes = [IsAuthenticated, (IsPlanningEngineer | IsSupervisor)]
+    serializer_class = TechnicianMetricsSerializer
+
+    def get(self, request, id, format=None):
+        """
+        GET /api/v1/metrics/technician/{id}/?date=YYYY-MM-DD
+        
+        If 'date' param is not provided, it defaults to the current date.
+        """
+        
+        # 1. Validate Technician ID
+        try:
+            # Check that user exists and is a technician
+            user = User.objects.get(id=id)
+            if user.role != 'technician':
+                return Response(
+                    {"error": "Specified user is not a technician."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (User.DoesNotExist, ValueError):
+            return Response(
+                {"error": "Technician not found."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 2. Validate Date Parameter
+        date_str = request.query_params.get('date')
+        if not date_str:
+            target_date = timezone.now().date()
+        else:
+            try:
+                target_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # 3. Calculate and Return Metrics
+        metrics = calculations.calculate_technician_metrics(
+            technician_id=id, 
+            target_date=target_date
+        )
+        
+        # 4. Serialize and return
+        serializer = self.serializer_class(data=metrics)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+from core.metrics.serializers import JobOrderProgressSerializer
+
+class JobOrderMetricsView(APIView):
+    """
+    Provides progress percentage, completion stats, and active alerts
+    for a specific Job Order.
+    
+    Access: Planning Engineer, Supervisor
+    """
+    permission_classes = [IsAuthenticated, (IsPlanningEngineer | IsSupervisor)]
+    serializer_class = JobOrderProgressSerializer
+
+    def get(self, request, id, format=None):
+        """
+        GET /api/v1/metrics/job-order/{id}/
+        
+        Returns:
+        - progress_percent: Overall completion percentage
+        - total_completed: Count of completed devices
+        - total_rejected: Count of rejected devices
+        - total_devices: Total devices in job order
+        - alerts: List of active alerts (efficiency/deadline)
+        """
+        
+        # 1. Validate Job Order ID
+        try:
+            # Check that job order exists and is active
+            job_order = JobOrder.objects.get(id=id)
+            if job_order.status == 'archived':
+                return Response(
+                    {"error": "Cannot retrieve metrics for archived job orders."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (JobOrder.DoesNotExist, ValueError):
+            return Response(
+                {"error": "Job Order not found."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 2. Calculate Progress
+        progress_data = calculations.calculate_job_order_progress(job_order_id=id)
+
+        # 3. Check for Alerts
+        alerts = calculations.check_alerts(job_order_id=id)
+        
+        # 4. Prepare Response Data
+        response_data = {
+            **progress_data,  # Unpacks the progress dict
+            "alerts": alerts
+        }
+        
+        # 5. Serialize and Return
+        serializer = self.serializer_class(data=response_data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

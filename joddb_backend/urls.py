@@ -25,7 +25,13 @@ from rest_framework_simplejwt.views import (
 )
 from core.views import UserRegistrationView # Import the new view
 from rest_framework.routers import DefaultRouter
-from core.views import JobOrderViewSet, TechnicianTaskViewSet , UserManagementViewSet# Import existing ViewSets
+from core.views import (
+    JobOrderViewSet, 
+    TechnicianTaskViewSet, 
+    UserManagementViewSet,
+    TechnicianMetricsView,
+    JobOrderMetricsView
+)
 
 
 # Router for ViewSets
@@ -51,4 +57,8 @@ urlpatterns = [
 
     # --- Core Application Endpoints ---
     path('api/v1/', include(router.urls)),
+    
+    # Metrics endpoints
+    path('api/v1/metrics/technician/<int:id>/', TechnicianMetricsView.as_view(), name='technician-metrics'),
+    path('api/v1/metrics/job-order/<int:id>/', JobOrderMetricsView.as_view(), name='job-order-metrics'),
 ]

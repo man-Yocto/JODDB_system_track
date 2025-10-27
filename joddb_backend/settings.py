@@ -1,7 +1,7 @@
 # joddb_backend/settings.py
+from decouple import config
 from pathlib import Path
 from datetime import timedelta
-from decouple import config
 
 # Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent

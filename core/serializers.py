@@ -1,13 +1,15 @@
 # core/serializers.py
 
 from rest_framework import serializers
+from core.notifications.utils import create_notification
 from django.db import transaction
 from django.core.validators import MinValueValidator
 from rest_framework.exceptions import ValidationError
-from core.models import JobOrder, Device, Task # Assuming start_time/end_time/actual_time_seconds are added to Task model
+from core.models import JobOrder, Device, Task , Inspection, SupervisorReview # Assuming start_time/end_time/actual_time_seconds are added to Task model
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from core.models import User, JobOrder, Device, Task
+
 
 # -----------------------------------------------------------
 # 1. Job Order Serializers (PE Use)
@@ -215,4 +217,57 @@ class UserReadSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'full_name', 'role', 'is_active', 'date_joined']
         read_only_fields = fields
 
+
+# -----------------------------------------------------------
+# 4. Inspection and Review Serializers
+# -----------------------------------------------------------
+
+class InspectionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Quality Inspector to perform an Inspection.
+    Validates that comments are mandatory upon rejection.
+    """
+    task_id = serializers.PrimaryKeyRelatedField(
+        queryset=Task.objects.all(),
+        write_only=True
+    )
+
+    class Meta:
+        model = Inspection
+        fields = ['id', 'task_id', 'decision', 'comments', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def validate(self, data):
+        """
+        Custom validation: If decision is 'rejected', comments must not be empty.
+        """
+        if data['decision'] == 'rejected' and not data.get('comments'):
+            raise ValidationError(
+                {"comments": "Comments are mandatory when rejecting an inspection."}
+            )
+        
+        # Further validation: Task must be ready for QA
+        task = data['task_id']
+        # Assumes the task status after 'end' action is 'done' (or 'pending_qa')
+        if task.status not in ['done', 'pending_qa']: 
+             raise ValidationError(
+                {"task_id": f"Task is not ready for inspection. Current status: {task.get_status_display()}."}
+            )
+
+        return data
+
+
+class SupervisorReviewSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Supervisor to perform the final Review.
+    """
+    inspection_id = serializers.PrimaryKeyRelatedField(
+        queryset=Inspection.objects.all(),
+        write_only=True
+    )
+    
+    class Meta:
+        model = SupervisorReview
+        fields = ['id', 'inspection_id', 'decision', 'comments', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
