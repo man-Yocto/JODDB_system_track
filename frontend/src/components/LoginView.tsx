@@ -2,19 +2,18 @@ import React, { useState } from 'react';
 import { User, Lock } from 'lucide-react';
 
 interface LoginViewProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (userId: string, password: string) => void;
+  error?: string;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, error }) => {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simple mock authentication for redirection
     if (userId && password) {
-      console.log('Attempting login...');
-      onLoginSuccess();
+      onLoginSuccess(userId, password);
     }
   };
 
@@ -27,6 +26,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             aselsan<span className="text-gray-500 font-light text-base ml-1">Middle East</span>
           </div>
         </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+            {error}
+          </div>
+        )}
 
         <div className="space-y-4">
           {/* User ID Input */}
@@ -76,6 +81,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         >
           Login
         </button>
+
+        {/* Demo credentials hint */}
+        <div className="mt-4 text-xs text-gray-500 text-center">
+          <p className="font-semibold mb-1">Demo Credentials:</p>
+          <p>User: user / user123</p>
+          <p>Supervisor: supervisor / super123</p>
+          <p>Planner: planner / plan123</p>
+          <p>QA: quality / qa123</p>
+        </div>
       </form>
     </div>
   );

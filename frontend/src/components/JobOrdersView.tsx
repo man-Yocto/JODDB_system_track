@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Briefcase, PlusCircle, CheckCircle } from 'lucide-react';
+import { Briefcase, PlusCircle, CheckCircle, Search } from 'lucide-react';
 import { type JobOrder, type CompletionReportData } from '../types';
 import { initialJobOrders } from '../data/mockData';
 import { JobItem } from './JobItem.tsx';
@@ -15,8 +15,22 @@ export const JobOrdersView: React.FC<JobOrdersViewProps> = ({ jobOrders, onUpdat
   const [activeJobId, setActiveJobId] = useState<string | null>(initialJobOrders[0]?.id || null);
   const [showWorkTimingDialog, setShowWorkTimingDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const activeJob = useMemo(() => jobOrders.find(job => job.id === activeJobId), [jobOrders, activeJobId]);
+
+  // Filter jobs based on search query
+  const filteredJobs = useMemo(() => {
+    if (!searchQuery.trim()) return jobOrders;
+    
+    const query = searchQuery.toLowerCase();
+    return jobOrders.filter(job =>
+      job.id.toLowerCase().includes(query) ||
+      job.title.toLowerCase().includes(query) ||
+      job.description.toLowerCase().includes(query) ||
+      job.status.toLowerCase().includes(query)
+    );
+  }, [jobOrders, searchQuery]);
 
   const handleSaveDetails = (id: string, details: string) => {
     onUpdateJob(id, { detailsOfWork: details, status: 'In Progress' });
@@ -66,15 +80,35 @@ export const JobOrdersView: React.FC<JobOrdersViewProps> = ({ jobOrders, onUpdat
       <div className="md:w-1/3 bg-white border-r border-gray-200 shadow-md flex flex-col">
         <h2 className="text-lg font-bold p-4 border-b border-gray-200 bg-gray-50 text-center uppercase tracking-wider flex-shrink-0">JOB ORDERS</h2>
         
-        <div className="flex-grow overflow-y-auto">
-          {jobOrders.map(job => (
-            <JobItem
-              key={job.id}
-              job={job}
-              onSelect={setActiveJobId}
-              isActive={job.id === activeJobId}
+        {/* Search Bar */}
+        <div className="p-4 border-b border-gray-200 flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search jobs..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
-          ))}
+          </div>
+        </div>
+        
+        <div className="flex-grow overflow-y-auto">
+          {filteredJobs.length === 0 ? (
+            <div className="p-4 text-center text-gray-500 text-sm">
+              No jobs found matching "{searchQuery}"
+            </div>
+          ) : (
+            filteredJobs.map(job => (
+              <JobItem
+                key={job.id}
+                job={job}
+                onSelect={setActiveJobId}
+                isActive={job.id === activeJobId}
+              />
+            ))
+          )}
         </div>
         
         <div className="p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">

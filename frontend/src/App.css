@@ -1,1 +1,32 @@
-@import "tailwindcss";
+/* Custom font import - must be first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* Tailwind imports */
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/preflight" layer(base);
+@import "tailwindcss/utilities" layer(utilities);
+
+/* Ensure proper stacking context */
+.fixed {
+  position: fixed;
+}
+
+/* Ensure modals and drawers render above content */
+[class*="z-40"],
+[class*="z-50"] {
+  isolation: isolate;
+}
+
+/* Dialog backdrop - ensure background is visible */
+.bg-gray-900.bg-opacity-5 {
+  background-color: rgba(17, 24, 39, 0.05) !important;
+}
+
+/* Ensure pointer events work correctly */
+.pointer-events-none {
+  pointer-events: none;
+}
+
+.pointer-events-auto {
+  pointer-events: auto;
+}

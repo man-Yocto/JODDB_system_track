@@ -160,7 +160,13 @@ export const CompletionReportDialog: React.FC<CompletionReportDialogProps> = ({
         </div>
       </div>
 
-      <div className="flex justify-end pt-6 border-t mt-6">
+      <div className="flex justify-end gap-3 pt-6 border-t mt-6">
+        <button
+          onClick={onClose}
+          className="px-8 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-300"
+        >
+          Cancel
+        </button>
         <button
           onClick={handleConfirm}
           disabled={!isFormValid}
