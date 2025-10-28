@@ -16,7 +16,7 @@ export interface CompletionReportData {
 
 export type View = 'login' | 'jobs';
 
-export type UserRole = 'user' | 'supervisor' | 'planner' | 'quality';
+export type UserRole = 'technician' | 'supervisor' | 'planner' | 'quality' | 'test_technician';
 
 export interface User {
   id: string;

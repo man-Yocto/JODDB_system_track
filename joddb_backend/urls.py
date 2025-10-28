@@ -19,18 +19,22 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import (
-    TokenObtainPairView,  # For /login/ or /token/
     TokenRefreshView,     # For /token/refresh/
     TokenBlacklistView    # For /logout/
 )
 from core.views import UserRegistrationView # Import the new view
+from core.serializers_auth import CustomTokenObtainPairView  # Custom login view
 from rest_framework.routers import DefaultRouter
 from core.views import (
     JobOrderViewSet, 
     TechnicianTaskViewSet, 
     UserManagementViewSet,
     TechnicianMetricsView,
-    JobOrderMetricsView
+    JobOrderMetricsView,
+    ExcelImportView,
+    DailyReportExportView,
+    InspectionViewSet,
+    SupervisorReviewViewSet,
 )
 
 
@@ -39,6 +43,9 @@ router = DefaultRouter()
 router.register(r'job-orders', JobOrderViewSet)
 router.register(r'tasks', TechnicianTaskViewSet, basename='task') # basename needed for custom actions
 router.register(r'users', UserManagementViewSet, basename='user-management')
+router.register(r'inspections', InspectionViewSet, basename='inspection')
+router.register(r'supervisor-reviews', SupervisorReviewViewSet, basename='supervisor-review')
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -47,7 +54,7 @@ urlpatterns = [
     path('api/v1/auth/register/', UserRegistrationView.as_view(), name='register'),
     
     # 1. Login (Obtain Access and Refresh Tokens)
-    path('api/v1/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/v1/auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     
     # 2. Refresh Token (Get a new Access Token)
     path('api/v1/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
@@ -61,4 +68,8 @@ urlpatterns = [
     # Metrics endpoints
     path('api/v1/metrics/technician/<int:id>/', TechnicianMetricsView.as_view(), name='technician-metrics'),
     path('api/v1/metrics/job-order/<int:id>/', JobOrderMetricsView.as_view(), name='job-order-metrics'),
+    
+    # Data Import/Export endpoints
+    path('api/v1/data/import/job-order/', ExcelImportView.as_view(), name='excel-import'),
+    path('api/v1/data/export/daily-report/', DailyReportExportView.as_view(), name='daily-report-export'),
 ]

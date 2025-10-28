@@ -22,6 +22,10 @@ from django.db import transaction
 from core.metrics import calculations
 
 import datetime
+import pandas as pd
+import csv
+from django.http import HttpResponse
+from io import BytesIO
 
 # -----------------------------------------------------------
 # 1. Job Order ViewSet (Planning Engineer)
@@ -499,3 +503,219 @@ class JobOrderMetricsView(APIView):
         serializer = self.serializer_class(data=response_data)
         serializer.is_valid(raise_exception=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+# -----------------------------------------------------------
+# 6. Excel Import View (Planning Engineer)
+# -----------------------------------------------------------
+
+class ExcelImportView(APIView):
+    """
+    Excel/CSV Import View for Planning Engineer to bulk create Job Orders.
+    
+    Endpoint: POST /api/v1/data/import/job-order/
+    Role Access: Planning Engineer only
+    """
+    permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'admin'])]
+    
+    def post(self, request, format=None):
+        """
+        Handles file upload, processes Excel/CSV data, and creates Job Orders.
+        
+        Expected file format:
+        - Columns: job_order_code, title, due_date, device_serial, standard_time_seconds
+        - Multiple rows with same job_order_code will be grouped into one JO
+        """
+        # 1. Validate file upload
+        if 'file' not in request.FILES:
+            return Response(
+                {"error": "No file provided. Please upload a CSV or Excel file."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        uploaded_file = request.FILES['file']
+        file_extension = uploaded_file.name.split('.')[-1].lower()
+        
+        if file_extension not in ['csv', 'xlsx', 'xls']:
+            return Response(
+                {"error": "Invalid file format. Please upload CSV or Excel file."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # 2. Read file into DataFrame
+            if file_extension == 'csv':
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+            
+            # 3. Validate required columns
+            required_columns = ['job_order_code', 'title', 'due_date', 'device_serial', 'standard_time_seconds']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            
+            if missing_columns:
+                return Response(
+                    {"error": f"Missing required columns: {', '.join(missing_columns)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # 4. Process data and group by job_order_code
+            job_orders_data = {}
+            duplicates = []
+            errors = []
+            
+            for index, row in df.iterrows():
+                jo_code = str(row['job_order_code']).strip()
+                device_serial = str(row['device_serial']).strip()
+                
+                # Check for duplicate device serials in DB
+                if Device.objects.filter(serial_number=device_serial).exists():
+                    duplicates.append(device_serial)
+                    continue
+                
+                # Group by job order code
+                if jo_code not in job_orders_data:
+                    job_orders_data[jo_code] = {
+                        'order_code': jo_code,
+                        'title': str(row['title']).strip(),
+                        'due_date': pd.to_datetime(row['due_date']).date(),
+                        'standard_time_seconds': int(row['standard_time_seconds']),
+                        'device_serials': []
+                    }
+                
+                job_orders_data[jo_code]['device_serials'].append(device_serial)
+            
+            # 5. Create Job Orders using JobOrderCreateSerializer
+            created_jos = []
+            total_devices = 0
+            
+            with transaction.atomic():
+                for jo_code, jo_data in job_orders_data.items():
+                    # Check if JO already exists
+                    if JobOrder.objects.filter(order_code=jo_code).exists():
+                        errors.append(f"Job Order {jo_code} already exists")
+                        continue
+                    
+                    # Use existing serializer for validation and creation
+                    serializer = JobOrderCreateSerializer(
+                        data=jo_data,
+                        context={'request': request}
+                    )
+                    
+                    if serializer.is_valid():
+                        job_order = serializer.save()
+                        created_jos.append(jo_code)
+                        total_devices += len(jo_data['device_serials'])
+                    else:
+                        errors.append(f"Job Order {jo_code}: {serializer.errors}")
+            
+            # 6. Return structured summary
+            return Response({
+                "success": True,
+                "summary": {
+                    "total_job_orders_created": len(created_jos),
+                    "total_devices_created": total_devices,
+                    "created_job_orders": created_jos,
+                    "duplicates": duplicates,
+                    "errors": errors
+                }
+            }, status=status.HTTP_201_CREATED if created_jos else status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            return Response(
+                {"error": f"Error processing file: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+# -----------------------------------------------------------
+# 7. Daily Report Export View (Planning Engineer & Supervisor)
+# -----------------------------------------------------------
+
+class DailyReportExportView(APIView):
+    """
+    Daily Report Export View for exporting completed tasks data.
+    
+    Endpoint: GET /api/v1/data/export/daily-report/?date=YYYY-MM-DD
+    Role Access: Planning Engineer, Supervisor
+    """
+    permission_classes = [IsAuthenticated, (IsPlanningEngineer | IsSupervisor)]
+    
+    def get(self, request, format=None):
+        """
+        Exports daily report of completed and accepted tasks.
+        
+        Query Parameters:
+        - date: YYYY-MM-DD format (optional, defaults to today)
+        - format: 'csv' or 'excel' (optional, defaults to 'csv')
+        """
+        # 1. Validate and parse date parameter
+        date_str = request.query_params.get('date')
+        export_format = request.query_params.get('format', 'csv').lower()
+        
+        if not date_str:
+            target_date = timezone.now().date()
+        else:
+            try:
+                target_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # 2. Query completed tasks for the requested date
+        # Filter tasks that were completed on the target date (using updated_at as completion date)
+        tasks = Task.objects.filter(
+            status__in=['done', 'pending_supervisor', 'completed'],
+            updated_at__date=target_date
+        ).select_related('job_order', 'device', 'technician')
+        
+        if not tasks.exists():
+            return Response(
+                {"message": f"No completed tasks found for {target_date}"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # 3. Aggregate data into flat list
+        report_data = []
+        for task in tasks:
+            efficiency = task.calculate_efficiency()
+            
+            report_data.append({
+                'Job Order Code': task.job_order.order_code if task.job_order else 'N/A',
+                'Device Serial': task.device.serial_number if task.device else 'N/A',
+                'Technician Name': task.technician.full_name if task.technician else 'Unassigned',
+                'Operation Name': task.operation_name,
+                'Standard Time (seconds)': task.standard_time_seconds,
+                'Actual Time (seconds)': task.actual_time_seconds if task.actual_time_seconds else 'N/A',
+                'Efficiency (%)': f"{efficiency:.2f}" if efficiency else 'N/A',
+                'Status': task.get_status_display(),
+                'Start Time': task.start_time.strftime('%Y-%m-%d %H:%M:%S') if task.start_time else 'N/A',
+                'End Time': task.end_time.strftime('%Y-%m-%d %H:%M:%S') if task.end_time else 'N/A',
+            })
+        
+        # 4. Generate and serve the file response
+        if export_format == 'excel':
+            # Generate Excel file
+            df = pd.DataFrame(report_data)
+            output = BytesIO()
+            
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Daily Report')
+            
+            output.seek(0)
+            
+            response = HttpResponse(
+                output.read(),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = f'attachment; filename="daily_report_{target_date}.xlsx"'
+            
+        else:  # CSV format (default)
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="daily_report_{target_date}.csv"'
+            
+            writer = csv.DictWriter(response, fieldnames=report_data[0].keys())
+            writer.writeheader()
+            writer.writerows(report_data)
+        
+        return response

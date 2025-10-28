@@ -153,10 +153,9 @@ class Task(models.Model):
     operation_name = models.CharField(max_length=200)
     standard_time_seconds = models.IntegerField(validators=[MinValueValidator(1)])
     
-    # ✅ أضف هذه الحقول المفقودة:
-    # start_time = models.DateTimeField(null=True, blank=True)
-    # end_time = models.DateTimeField(null=True, blank=True)
-    # actual_time_seconds = models.IntegerField(null=True, blank=True)
+    start_time = models.DateTimeField(null=True, blank=True)
+    end_time = models.DateTimeField(null=True, blank=True)
+    actual_time_seconds = models.IntegerField(null=True, blank=True)
     
     status = models.CharField(
         max_length=50,

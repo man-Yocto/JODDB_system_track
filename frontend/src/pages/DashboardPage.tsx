@@ -1,23 +1,44 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { type JobOrder } from '../types';
-import { initialJobOrders } from '../data/mockData';
 import { Header } from '../components/Header';
-import { JobOrdersView } from '../components/JobOrdersView';
 import { SupervisorDashboard } from '../components/supervisor/SupervisorDashboard';
 import { PlannerDashboard } from '../components/planner/PlannerDashboard';
 import { QADashboard } from '../components/qa/QADashboard';
 
+import { TestTechnicianDashboard } from '../components/test-technician/TestTechnicianDashboard';
+
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [jobOrders, setJobOrders] = useState<JobOrder[]>(initialJobOrders);
 
-  // Use useEffect to handle navigation instead of during render
+  // Handle navigation based on user role - redirect to dedicated pages
   useEffect(() => {
     if (!user) {
       navigate('/', { replace: true });
+      return;
+    }
+
+    // Redirect to role-specific pages for better UX
+    switch (user.role) {
+      case 'technician':
+        navigate('/technician', { replace: true });
+        break;
+      case 'quality':
+        navigate('/quality', { replace: true });
+        break;
+      case 'planner':
+        navigate('/planner', { replace: true });
+        break;
+      case 'supervisor':
+        navigate('/supervisor', { replace: true });
+        break;
+      case 'test_technician':
+        navigate('/test-technician', { replace: true });
+        break;
+      default:
+        // Stay on dashboard for unknown roles
+        break;
     }
   }, [user, navigate]);
 
@@ -26,15 +47,7 @@ export const DashboardPage: React.FC = () => {
     navigate('/', { replace: true });
   }, [logout, navigate]);
 
-  const handleUpdateJob = useCallback((jobId: string, details: Partial<JobOrder>) => {
-    setJobOrders(prevJobs =>
-      prevJobs.map(job =>
-        job.id === jobId
-          ? { ...job, ...details }
-          : job
-      )
-    );
-  }, []);
+  // No local job state on this page; role dashboards handle their own data
 
   // Return null if user is not authenticated (will redirect via useEffect)
   if (!user) {
@@ -44,9 +57,6 @@ export const DashboardPage: React.FC = () => {
   // Render different dashboard content based on user role
   const renderDashboardContent = () => {
     switch (user.role) {
-      case 'user':
-        return <JobOrdersView jobOrders={jobOrders} onUpdateJob={handleUpdateJob} />;
-      
       case 'supervisor':
         return <SupervisorDashboard />;
       
@@ -56,6 +66,9 @@ export const DashboardPage: React.FC = () => {
       case 'quality':
         return <QADashboard />;
       
+      case 'test_technician':
+        return <TestTechnicianDashboard />;
+      
       default:
         return <div>Unknown role</div>;
     }
@@ -64,13 +77,7 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header onLogout={handleLogout} />
-      {user.role === 'user' ? (
-        <main className="h-[calc(100vh-65px)]">
-          {renderDashboardContent()}
-        </main>
-      ) : (
-        renderDashboardContent()
-      )}
+      {renderDashboardContent()}
     </div>
   );
 };

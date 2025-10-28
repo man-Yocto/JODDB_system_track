@@ -1,56 +1,96 @@
-import React, { createContext, useContext, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { type User, type UserRole } from '../types';
+import { api } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
-  login: (userId: string, password: string) => boolean;
-  logout: () => void;
+  login: (username: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  isLoading: boolean;
+  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users database
-const mockUsers: Record<string, { id: string; role: UserRole; name: string }> = {
-  user: { id: '1', role: 'user', name: 'Technician User' },
-  supervisor: { id: '2', role: 'supervisor', name: 'Supervisor User' },
-  planner: { id: '3', role: 'planner', name: 'Planning Engineer' },
-  quality: { id: '4', role: 'quality', name: 'Quality Inspector' }
-};
-
-// Mock passwords database
-const mockPasswords: Record<string, string> = {
-  user: 'user123',
-  supervisor: 'super123',
-  planner: 'plan123',
-  quality: 'qa123'
-};
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const login = (username: string, password: string): boolean => {
-    const userData = mockUsers[username];
-    const correctPassword = mockPasswords[username];
-
-    if (userData && correctPassword === password) {
-      setUser({
-        id: userData.id,
-        role: userData.role,
-        name: userData.name
-      });
-      return true;
-    }
+  // Check for existing session on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    const token = localStorage.getItem('access_token');
     
-    return false;
+    if (storedUser && token) {
+      try {
+        const userData = JSON.parse(storedUser);
+        setUser({
+          id: userData.id.toString(),
+          role: mapBackendRoleToFrontend(userData.role),
+          name: userData.full_name || userData.username,
+        });
+      } catch (err) {
+        console.error('Failed to restore user session:', err);
+        localStorage.clear();
+      }
+    }
+  }, []);
+
+  // Map backend roles to frontend roles
+  const mapBackendRoleToFrontend = (backendRole: string): UserRole => {
+    const roleMapping: Record<string, UserRole> = {
+      'technician': 'technician',
+      'supervisor': 'supervisor',
+      'planning': 'planner',
+      'quality': 'quality',
+      'admin': 'planner', // Admin treated as planner in UI
+    };
+    return roleMapping[backendRole] || 'technician';
   };
 
-  const logout = () => {
-    // Clear user state immediately
-    setUser(null);
+  const login = async (username: string, password: string): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Call the real backend API
+      const response = await api.auth.login(username, password);
+
+      // Set user state from backend response
+      setUser({
+        id: response.user.id.toString(),
+        role: mapBackendRoleToFrontend(response.user.role),
+        name: response.user.full_name || response.user.username,
+      });
+
+      setIsLoading(false);
+      return true;
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(err.message || 'Login failed. Please check your credentials.');
+      setIsLoading(false);
+      return false;
+    }
+  };
+
+  const logout = async () => {
+    setIsLoading(true);
+    
+    try {
+      // Call backend logout to blacklist token
+      await api.auth.logout();
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      // Clear user state
+      setUser(null);
+      setIsLoading(false);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading, error }}>
       {children}
     </AuthContext.Provider>
   );
