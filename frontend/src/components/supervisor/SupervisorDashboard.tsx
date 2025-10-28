@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Search, Filter, FileText, AlertTriangle, ClipboardCheck } from 'lucide-react';
+import { Header } from '../Header';
 import { DashboardKPIs } from './DashboardKPIs';
 import { JobOrdersSummary } from './JobOrdersSummary';
 import { TechnicianPerformanceTable } from './TechnicianPerformanceTable';
@@ -19,6 +22,8 @@ export const SupervisorDashboard: React.FC = () => {
   const [selectedTechnicianId, setSelectedTechnicianId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [qaReviews, setQaReviews] = useState(mockSupervisorQAReviews);
+  const { logout, user } = useAuth();
+  const navigate = useNavigate();
 
   const handleJobClick = (jobId: string) => {
     setSelectedJobId(jobId);
@@ -76,6 +81,11 @@ export const SupervisorDashboard: React.FC = () => {
       )
     );
     console.log(`QA Review ${reviewId} rejected with comments:`, comments);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
   };
 
   // Filter based on current view and search query
@@ -161,70 +171,14 @@ export const SupervisorDashboard: React.FC = () => {
   const pendingQAReviews = qaReviews.filter(r => r.status === 'pending-supervisor').length;
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
-      {/* Top Bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">Supervisor Control Panel</h1>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex gap-6">
-          <button
-            onClick={() => setCurrentView('dashboard')}
-            className={`pb-2 px-1 font-medium transition-colors ${
-              currentView === 'dashboard'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => setCurrentView('alerts')}
-            className={`pb-2 px-1 font-medium transition-colors flex items-center gap-2 ${
-              currentView === 'alerts'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            <AlertTriangle className="w-4 h-4" />
-            Alerts
-            {flaggedCount > 0 && (
-              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                {flaggedCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setCurrentView('reports')}
-            className={`pb-2 px-1 font-medium transition-colors flex items-center gap-2 ${
-              currentView === 'reports'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            Reports
-          </button>
-          <button
-            onClick={() => setCurrentView('qa-reviews')}
-            className={`pb-2 px-1 font-medium transition-colors flex items-center gap-2 ${
-              currentView === 'qa-reviews'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            <ClipboardCheck className="w-4 h-4" />
-            QA Reviews
-            {pendingQAReviews > 0 && (
-              <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">
-                {pendingQAReviews}
-              </span>
-            )}
-          </button>
-        </nav>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <Header 
+        title="Supervisor Dashboard" 
+        subtitle="Manage and oversee all operations"
+        user={user}
+        onLogout={handleLogout}
+      />
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6">

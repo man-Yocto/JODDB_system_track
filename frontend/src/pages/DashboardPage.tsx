@@ -24,9 +24,11 @@ export const DashboardPage: React.FC = () => {
       case 'technician':
         navigate('/technician', { replace: true });
         break;
+      case 'quality_inspector':
       case 'quality':
         navigate('/quality', { replace: true });
         break;
+      case 'planning':
       case 'planner':
         navigate('/planner', { replace: true });
         break;

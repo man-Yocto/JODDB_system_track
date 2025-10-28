@@ -1,5 +1,67 @@
 // API Service Layer for JODDB Backend Integration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+// Create axios instance
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add request interceptor to include token in all requests
+axiosInstance.interceptors.request.use(
+  (config: any) => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error: any) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to handle token refresh
+axiosInstance.interceptors.response.use(
+  (response: any) => response,
+  async (error: any) => {
+    const originalRequest = error.config;
+
+    // If error is 401 and we haven't retried yet
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          const response = await axios.post(`${API_BASE_URL}/auth/token/refresh/`, {
+            refresh: refreshToken,
+          });
+
+          const { access } = response.data;
+          localStorage.setItem('access_token', access);
+
+          // Retry original request with new token
+          originalRequest.headers.Authorization = `Bearer ${access}`;
+          return axiosInstance(originalRequest);
+        }
+      } catch (refreshError) {
+        // Refresh failed, clear tokens and redirect to login
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
+        window.location.href = '/';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // Types
 export interface LoginResponse {
@@ -8,6 +70,7 @@ export interface LoginResponse {
   user: {
     id: number;
     username: string;
+    email: string;
     role: string;
     full_name: string;
   };
@@ -78,44 +141,14 @@ export interface Inspection {
   created_at: string;
 }
 
-// Error handling
-class APIError extends Error {
-  status: number;
-  
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-    this.name = 'APIError';
-  }
+// Handle API responses (Axios version)
+function handleResponse<T>(response: any): T {
+  return response.data;
 }
 
-// Helper function to get auth headers
-const getAuthHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('access_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-};
-
-// Handle API responses
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-    try {
-      const errorData = await response.json();
-      errorMessage = errorData.detail || errorData.error || JSON.stringify(errorData);
-    } catch {
-      // If JSON parsing fails, use the default error message
-    }
-    throw new APIError(response.status, errorMessage);
-  }
-  return response.json();
-}
-
-// Handle paginated responses from DRF
-async function handlePaginatedResponse<T>(response: Response): Promise<T[]> {
-  const data = await handleResponse<any>(response);
+// Handle paginated responses from DRF (Axios version)
+function handlePaginatedResponse<T>(response: any): T[] {
+  const data = response.data;
   // If response has 'results' key (paginated), return results array
   // Otherwise, assume it's already an array
   return Array.isArray(data) ? data : (data?.results || []);
@@ -131,13 +164,8 @@ export const authAPI = {
    * POST /api/v1/auth/login/
    */
   login: async (username: string, password: string): Promise<LoginResponse> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/login/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    
-    const data = await handleResponse<LoginResponse>(response);
+    const response = await axiosInstance.post('/api/v1/auth/login/', { username, password });
+    const data = response.data;
     
     // Store tokens in localStorage
     localStorage.setItem('access_token', data.access);
@@ -157,13 +185,11 @@ export const authAPI = {
       throw new Error('No refresh token available');
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/token/refresh/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh: refreshToken }),
+    const response = await axiosInstance.post('/api/v1/auth/token/refresh/', {
+      refresh: refreshToken,
     });
 
-    const data = await handleResponse<{ access: string }>(response);
+    const data = response.data;
     localStorage.setItem('access_token', data.access);
     
     return data;
@@ -177,10 +203,8 @@ export const authAPI = {
     const refreshToken = localStorage.getItem('refresh_token');
     if (refreshToken) {
       try {
-        await fetch(`${API_BASE_URL}/api/v1/auth/logout/`, {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ refresh: refreshToken }),
+        await axiosInstance.post('/api/v1/auth/logout/', {
+          refresh: refreshToken,
         });
       } catch (error) {
         console.error('Logout error:', error);
@@ -204,9 +228,7 @@ export const taskAPI = {
    * GET /api/v1/tasks/
    */
   getTasks: async (): Promise<Task[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tasks/`, {
-      headers: getAuthHeaders(),
-    });
+    const response = await axiosInstance.get('/api/v1/tasks/');
     return handlePaginatedResponse<Task>(response);
   },
 
@@ -215,9 +237,7 @@ export const taskAPI = {
    * GET /api/v1/tasks/{id}/
    */
   getTask: async (taskId: number): Promise<Task> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tasks/${taskId}/`, {
-      headers: getAuthHeaders(),
-    });
+    const response = await axiosInstance.get(`/api/v1/tasks/${taskId}/`);
     return handleResponse<Task>(response);
   },
 
@@ -226,10 +246,7 @@ export const taskAPI = {
    * PATCH /api/v1/tasks/{id}/start/
    */
   startTask: async (taskId: number): Promise<Task> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tasks/${taskId}/start/`, {
-      method: 'PATCH',
-      headers: getAuthHeaders(),
-    });
+    const response = await axiosInstance.patch(`/api/v1/tasks/${taskId}/start/`);
     return handleResponse<Task>(response);
   },
 
@@ -238,10 +255,8 @@ export const taskAPI = {
    * PATCH /api/v1/tasks/{id}/end/
    */
   endTask: async (taskId: number, notes?: string): Promise<Task> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tasks/${taskId}/end/`, {
-      method: 'PATCH',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ notes: notes || '' }),
+    const response = await axiosInstance.patch(`/api/v1/tasks/${taskId}/end/`, {
+      notes: notes || '',
     });
     return handleResponse<Task>(response);
   },
@@ -257,9 +272,7 @@ export const jobOrderAPI = {
    * GET /api/v1/job-orders/
    */
   getJobOrders: async (): Promise<JobOrder[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/job-orders/`, {
-      headers: getAuthHeaders(),
-    });
+    const response = await axiosInstance.get('/api/v1/job-orders/');
     return handlePaginatedResponse<JobOrder>(response);
   },
 
@@ -268,9 +281,7 @@ export const jobOrderAPI = {
    * GET /api/v1/job-orders/{id}/
    */
   getJobOrder: async (jobOrderId: number): Promise<JobOrder> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/job-orders/${jobOrderId}/`, {
-      headers: getAuthHeaders(),
-    });
+    const response = await axiosInstance.get(`/api/v1/job-orders/${jobOrderId}/`);
     return handleResponse<JobOrder>(response);
   },
 
@@ -286,11 +297,7 @@ export const jobOrderAPI = {
     standard_time_seconds: number;
     device_serials: string[];
   }): Promise<JobOrder> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/job-orders/`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
+    const response = await axiosInstance.post('/api/v1/job-orders/', data);
     return handleResponse<JobOrder>(response);
   },
 
@@ -311,13 +318,10 @@ export const jobOrderAPI = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/api/v1/data/import/job-order/`, {
-      method: 'POST',
+    const response = await axiosInstance.post('/api/v1/data/import/job-order/', formData, {
       headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        'Content-Type': 'multipart/form-data',
       },
-      body: formData,
     });
     return handleResponse(response);
   },
@@ -337,11 +341,8 @@ export const metricsAPI = {
     date?: string
   ): Promise<TechnicianMetrics> => {
     const dateParam = date ? `?date=${date}` : '';
-    const response = await fetch(
-      `${API_BASE_URL}/api/v1/metrics/technician/${technicianId}/${dateParam}`,
-      {
-        headers: getAuthHeaders(),
-      }
+    const response = await axiosInstance.get(
+      `/api/v1/metrics/technician/${technicianId}/${dateParam}`
     );
     return handleResponse<TechnicianMetrics>(response);
   },
@@ -351,11 +352,8 @@ export const metricsAPI = {
    * GET /api/v1/metrics/job-order/{id}/
    */
   getJobOrderProgress: async (jobOrderId: number): Promise<JobOrderProgress> => {
-    const response = await fetch(
-      `${API_BASE_URL}/api/v1/metrics/job-order/${jobOrderId}/`,
-      {
-        headers: getAuthHeaders(),
-      }
+    const response = await axiosInstance.get(
+      `/api/v1/metrics/job-order/${jobOrderId}/`
     );
     return handleResponse<JobOrderProgress>(response);
   },
@@ -375,11 +373,7 @@ export const inspectionAPI = {
     decision: 'accepted' | 'rejected';
     comments: string;
   }): Promise<Inspection> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/inspections/`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
+    const response = await axiosInstance.post('/api/v1/inspections/', data);
     return handleResponse<Inspection>(response);
   },
 
@@ -388,9 +382,7 @@ export const inspectionAPI = {
    * GET /api/v1/inspections/
    */
   getInspections: async (): Promise<Inspection[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/inspections/`, {
-      headers: getAuthHeaders(),
-    });
+    const response = await axiosInstance.get('/api/v1/inspections/');
     return handlePaginatedResponse<Inspection>(response);
   },
 };
@@ -409,20 +401,14 @@ export const exportAPI = {
     if (date) params.append('date', date);
     params.append('format', format);
 
-    const response = await fetch(
-      `${API_BASE_URL}/api/v1/data/export/daily-report/?${params.toString()}`,
+    const response = await axiosInstance.get(
+      `/api/v1/data/export/daily-report/?${params.toString()}`,
       {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
+        responseType: 'blob',
       }
     );
 
-    if (!response.ok) {
-      throw new APIError(response.status, 'Failed to export report');
-    }
-
-    return response.blob();
+    return response.data;
   },
 };
 

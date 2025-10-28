@@ -1,20 +1,26 @@
 import React, { useState } from 'react';
 import { User, Lock } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
-interface LoginViewProps {
-  onLoginSuccess: (userId: string, password: string) => Promise<void>;
-  error?: string;
-  isLoading?: boolean;
-}
-
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, error, isLoading }) => {
+export const LoginView: React.FC = () => {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
+  const [localError, setLocalError] = useState('');
+  const { login, isLoading } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (userId && password && !isLoading) {
-      await onLoginSuccess(userId, password);
+    setLocalError('');
+
+    try {
+      const success = await login(userId, password);
+
+      if (!success) {
+        setLocalError('Login failed. Please check your credentials.');
+      }
+    } catch (err: any) {
+      console.error('Login failed:', err);
+      setLocalError('An error occurred during login');
     }
   };
 
@@ -28,9 +34,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, error, isL
           </div>
         </div>
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
-            {error}
+        {/* Error Display - only show actual errors, not HTTP 200 */}
+        {localError && !localError.includes('200') && !localError.includes('OK') && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            {localError}
           </div>
         )}
 

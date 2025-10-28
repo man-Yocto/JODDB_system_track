@@ -5,36 +5,37 @@ import { api } from '../services/api';
 interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<boolean>;
-  logout: () => Promise<void>;
+  logout: () => void;
+  isAuthenticated: boolean;
   isLoading: boolean;
-  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Check for existing session on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('access_token');
-    
-    if (storedUser && token) {
-      try {
-        const userData = JSON.parse(storedUser);
-        setUser({
-          id: userData.id.toString(),
-          role: mapBackendRoleToFrontend(userData.role),
-          name: userData.full_name || userData.username,
-        });
-      } catch (err) {
-        console.error('Failed to restore user session:', err);
-        localStorage.clear();
+    const initAuth = async () => {
+      const token = localStorage.getItem('access_token');
+      const storedUser = localStorage.getItem('user');
+
+      if (token && storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (error) {
+          console.error('Failed to restore session:', error);
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user');
+        }
       }
-    }
+      setIsLoading(false);
+    };
+
+    initAuth();
   }, []);
 
   // Map backend roles to frontend roles
@@ -50,26 +51,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const login = async (username: string, password: string): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
-
     try {
-      // Call the real backend API
       const response = await api.auth.login(username, password);
-
-      // Set user state from backend response
-      setUser({
-        id: response.user.id.toString(),
-        role: mapBackendRoleToFrontend(response.user.role),
-        name: response.user.full_name || response.user.username,
-      });
-
-      setIsLoading(false);
-      return true;
+      
+      console.log('Login response:', response); // Debug log
+      
+      // Store tokens and user data
+      if (response.access && response.refresh && response.user) {
+        localStorage.setItem('access_token', response.access);
+        localStorage.setItem('refresh_token', response.refresh);
+        
+        // Map backend user format to frontend User type
+        const mappedUser: any = {
+          id: String(response.user.id),
+          name: response.user.full_name || response.user.username,
+          email: response.user.email || response.user.username,
+          username: response.user.username,
+          role: response.user.role as UserRole
+        };
+        
+        localStorage.setItem('user', JSON.stringify(mappedUser));
+        setUser(mappedUser);
+        
+        console.log('Login successful, user set:', mappedUser); // Debug log
+        return true;
+      } else {
+        console.error('Invalid login response format:', response);
+        return false;
+      }
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message || 'Login failed. Please check your credentials.');
-      setIsLoading(false);
       return false;
     }
   };
@@ -84,13 +95,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error('Logout error:', err);
     } finally {
       // Clear user state
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
       setUser(null);
       setIsLoading(false);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading, error }}>
+    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

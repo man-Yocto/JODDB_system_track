@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Users, BarChart3, Search, Filter, CheckCircle } from 'lucide-react';
+import { Plus, Users, BarChart3, CheckCircle } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { Header } from '../Header';
 import { PlannerKPIs } from './PlannerKPIs';
 import { JobOrdersPanel } from './JobOrdersPanel';
 import { JobOrderDetails } from './JobOrderDetails';
@@ -13,12 +16,19 @@ import { mockPlannerJobs, mockPlannerTasks } from '../../data/plannerMockData';
 type View = 'dashboard' | 'job-details' | 'users' | 'analytics' | 'task-review';
 
 export const PlannerDashboard: React.FC = () => {
+  const { logout, user } = useAuth();
+  const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [showCreateJobModal, setShowCreateJobModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [tasks, setTasks] = useState(mockPlannerTasks);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
 
   const handleJobClick = (jobId: string) => {
     setSelectedJobId(jobId);
@@ -103,13 +113,16 @@ export const PlannerDashboard: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
-      {/* Top Bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">Planning Control Panel</h1>
-        </div>
+      {/* Header */}
+      <Header 
+        title="Planning Control Panel" 
+        subtitle="Job order planning and scheduling"
+        user={user}
+        onLogout={handleLogout}
+      />
 
-        {/* Navigation */}
+      {/* Navigation Tabs */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3">
         <nav className="flex gap-6">
           <button
             onClick={() => setCurrentView('dashboard')}
