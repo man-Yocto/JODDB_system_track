@@ -25,15 +25,16 @@ export const WorkTimingDetailsDialog: React.FC<WorkTimingDetailsDialogProps> = (
     }
   }, [currentDetails, isOpen]);
 
-  const handleSave = () => {
-    if (jobId) {
+    const handleSave = () => {
+    if (jobId && details.trim()) {
       onSaveDetails(jobId, details);
+      setDetails('');
       onClose();
     }
   };
 
   return (
-    <Dialog title="Work Timing Details" isOpen={isOpen} onClose={onClose}>
+    <Dialog title="Add Note" isOpen={isOpen} onClose={onClose}>
       <div className="space-y-4">
         <label className="block text-sm font-medium text-gray-700" htmlFor="workDetails">
           Intermediate Details for Job ID: {jobId}
@@ -58,7 +59,7 @@ export const WorkTimingDetailsDialog: React.FC<WorkTimingDetailsDialogProps> = (
             disabled={!details.trim()}
             className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-300 disabled:opacity-50"
           >
-            Save Work Details
+            Save Note
           </button>
         </div>
       </div>

@@ -74,28 +74,6 @@ export const InspectionDialog: React.FC<InspectionDialogProps> = ({
               </div>
             </div>
 
-            {/* Performance Metrics */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className={`p-4 rounded-lg border ${task.efficiency >= 100 ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'}`}>
-                <div className="text-sm text-gray-600 mb-1">Efficiency</div>
-                <div className={`text-2xl font-bold ${task.efficiency >= 100 ? 'text-green-700' : 'text-yellow-700'}`}>
-                  {task.efficiency}%
-                </div>
-              </div>
-
-              <div className={`p-4 rounded-lg border ${isOvertime ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-blue-50'}`}>
-                <div className="text-sm text-gray-600 mb-1">Actual Time</div>
-                <div className={`text-2xl font-bold ${isOvertime ? 'text-red-700' : 'text-blue-700'}`}>
-                  {actualHours}h
-                </div>
-              </div>
-
-              <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-                <div className="text-sm text-gray-600 mb-1">Standard Time</div>
-                <div className="text-2xl font-bold text-gray-700">{standardHours}h</div>
-              </div>
-            </div>
-
             {/* Timeline */}
             <div>
               <h3 className="font-semibold text-gray-800 mb-2">Timeline</h3>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle } from 'lucide-react';
 import { Dialog } from './Dialog.tsx';
-import { type CompletionReportData } from '../types';
+import { type CompletionReportData } from '../types/types';
 
 interface CompletionReportDialogProps {
   isOpen: boolean;
@@ -10,172 +10,141 @@ interface CompletionReportDialogProps {
   onComplete: (jobId: string, reportData: CompletionReportData) => void;
 }
 
-export const CompletionReportDialog: React.FC<CompletionReportDialogProps> = ({ 
-  isOpen, 
-  onClose, 
-  jobId, 
-  onComplete 
+export const CompletionReportDialog: React.FC<CompletionReportDialogProps> = ({
+  isOpen,
+  onClose,
+  jobId,
+  onComplete
 }) => {
   const [reportData, setReportData] = useState<CompletionReportData>({
     amountCompleted: 0,
     timeFrom: '',
     timeTo: '',
     reportDetails: '',
-    serialNumbers: '',
+    serialNumbers: ''
   });
 
-  // State reset on open/close
-  React.useEffect(() => {
-    if (isOpen) {
-      setReportData({
-        amountCompleted: 0,
-        timeFrom: '',
-        timeTo: '',
-        reportDetails: '',
-        serialNumbers: '',
-      });
-    }
-  }, [isOpen]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { id, value } = e.target;
-    setReportData(prev => ({
-      ...prev,
-      [id]: value,
-    }));
+  const resetForm = () => {
+    setReportData({
+      amountCompleted: 0,
+      timeFrom: '',
+      timeTo: '',
+      reportDetails: '',
+      serialNumbers: ''
+    });
   };
-  
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setReportData(prev => ({
-          ...prev,
-          amountCompleted: parseInt(e.target.value, 10) || 0,
-      }));
-  }
 
-  const handleConfirm = () => {
-    // Basic validation check
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     if (jobId && reportData.amountCompleted > 0 && reportData.timeFrom && reportData.timeTo) {
       onComplete(jobId, reportData);
-      onClose();
-    } else {
-      // In a real app, show a proper feedback message instead of console error
-      console.error("Please fill in all required fields (Amount, Time From/To, and Completed Amount > 0).");
+      handleClose();
     }
   };
 
   const isFormValid = reportData.amountCompleted > 0 && !!reportData.timeFrom && !!reportData.timeTo;
 
   return (
-    <Dialog title={`Final Report for Job: ${jobId}`} isOpen={isOpen} onClose={onClose} className="!max-w-4xl">
-      {/* Two-column layout based on Screenshot 1 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* LEFT COLUMN: Serial Numbers */}
-        <div>
-          <h3 className="text-xl font-semibold mb-4 text-gray-800">Enter serial numbers</h3>
-          
-          {/* Mock Serial Number Dropdown/Input (Styled like the screenshot) */}
-          <div className="mb-4 relative">
-            <input
-              type="text"
-              className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm pr-10"
-              placeholder="type here..."
-              // This is a mock input based on the screenshot, it doesn't store state
+    <Dialog title="Complete Job Report" isOpen={isOpen} onClose={handleClose} className="!max-w-3xl">
+      <form onSubmit={handleSubmit}>
+        <div className="space-y-6">
+          {/* Serial Numbers */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Serial Numbers (one per line)
+            </label>
+            <textarea
+              value={reportData.serialNumbers}
+              onChange={(e) => setReportData(prev => ({ ...prev, serialNumbers: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+              rows={4}
+              placeholder="Enter serial numbers, one per line..."
             />
-            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-              <span className="text-xl">v</span> {/* Simple down arrow mock */}
-            </div>
           </div>
 
-          <label className="block text-base font-medium text-gray-700 mb-2" htmlFor="serialNumbers">
-            Serial Numbers
-          </label>
-          <textarea
-            id="serialNumbers"
-            rows={10}
-            className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 transition shadow-sm"
-            placeholder="Enter a list of serial numbers, one per line..."
-            value={reportData.serialNumbers}
-            onChange={handleChange}
-          />
-        </div>
-
-        {/* RIGHT COLUMN: Amount, Time, Details */}
-        <div className="space-y-6">
-          {/* Enter Amount */}
-          <div>
-            <label className="block text-xl font-semibold text-gray-800 mb-2" htmlFor="amountCompleted">
-              Enter the amount
+          {/* Amount Completed */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Amount Completed <span className="text-red-500">*</span>
             </label>
             <input
-              id="amountCompleted"
               type="number"
-              min="0"
+              min="1"
               value={reportData.amountCompleted}
-              onChange={handleAmountChange}
-              className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-lg"
+              onChange={(e) => setReportData(prev => ({ ...prev, amountCompleted: parseInt(e.target.value) || 0 }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="0"
               required
             />
           </div>
 
-          {/* Enter Time From/To */}
-          <div>
-            <label className="block text-base font-medium text-gray-700 mb-2">
-              Enter the time from to
-            </label>
-            <div className="flex gap-4">
+          {/* Work Timing */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Time From <span className="text-red-500">*</span>
+              </label>
               <input
-                id="timeFrom"
                 type="time"
                 value={reportData.timeFrom}
-                onChange={handleChange}
-                className="flex-1 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                onChange={(e) => setReportData(prev => ({ ...prev, timeFrom: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Time To <span className="text-red-500">*</span>
+              </label>
               <input
-                id="timeTo"
                 type="time"
                 value={reportData.timeTo}
-                onChange={handleChange}
-                className="flex-1 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                onChange={(e) => setReportData(prev => ({ ...prev, timeTo: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
             </div>
           </div>
 
-          {/* Any Details */}
-          <div>
-            <label className="block text-xl font-semibold text-gray-800 mb-2" htmlFor="reportDetails">
-              Any Details
+          {/* Report Details */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Report Details / Notes
             </label>
             <textarea
-              id="reportDetails"
-              rows={5}
-              className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 transition shadow-sm"
-              placeholder="Type here....."
               value={reportData.reportDetails}
-              onChange={handleChange}
+              onChange={(e) => setReportData(prev => ({ ...prev, reportDetails: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={4}
+              placeholder="Enter any additional notes or observations..."
             />
           </div>
         </div>
-      </div>
 
-      <div className="flex justify-end gap-3 pt-6 border-t mt-6">
-        <button
-          onClick={onClose}
-          className="px-8 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-300"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleConfirm}
-          disabled={!isFormValid}
-          className="px-8 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-300 disabled:opacity-50"
-        >
-          <CheckCircle className="inline w-5 h-5 mr-2" />
-          Finalize Report and Complete Task
-        </button>
-      </div>
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+          <button
+            type="button"
+            onClick={handleClose}
+            className="px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg shadow-sm hover:bg-gray-300 transition duration-300"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!isFormValid}
+            className="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-sm hover:bg-green-700 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <CheckCircle className="w-4 h-4" />
+            Submit Report
+          </button>
+        </div>
+      </form>
     </Dialog>
   );
 };

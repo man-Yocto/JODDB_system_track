@@ -82,9 +82,6 @@ export const TaskInspectionPanel: React.FC<TaskInspectionPanelProps> = ({ tasks,
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Task Info</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Technician</th>
-                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Time</th>
-                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Efficiency</th>
-                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Status</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Action</th>
               </tr>
             </thead>
@@ -97,9 +94,6 @@ export const TaskInspectionPanel: React.FC<TaskInspectionPanelProps> = ({ tasks,
                 </tr>
               ) : (
                 filteredTasks.map(task => {
-                  const isOvertime = task.actualTime > task.standardTime;
-                  const isLowEfficiency = task.efficiency < 80;
-
                   return (
                     <tr key={task.id} className="border-b hover:bg-gray-50 transition">
                       <td className="px-4 py-3">
@@ -111,37 +105,6 @@ export const TaskInspectionPanel: React.FC<TaskInspectionPanelProps> = ({ tasks,
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">{task.technicianName}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col items-center">
-                          <div className="flex items-center gap-1">
-                            <Clock className={`w-4 h-4 ${isOvertime ? 'text-red-500' : 'text-gray-400'}`} />
-                            <span className={`text-sm ${isOvertime ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
-                              {Math.round(task.actualTime / 60)}m
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            std: {Math.round(task.standardTime / 60)}m
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <TrendingUp className={`w-4 h-4 ${getEfficiencyColor(task.efficiency)}`} />
-                          <span className={`font-semibold ${getEfficiencyColor(task.efficiency)}`}>
-                            {task.efficiency}%
-                          </span>
-                        </div>
-                        {isLowEfficiency && (
-                          <AlertTriangle className="w-4 h-4 text-yellow-500 mx-auto mt-1" />
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          task.status === 'pending_qa' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {task.status.replace('_', ' ')}
-                        </span>
-                      </td>
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => handleInspectClick(task)}

@@ -13,6 +13,7 @@ export const LoginPage: React.FC = () => {
     
     if (success) {
       setError('');
+      // On successful login, redirect to dashboard
       navigate('/dashboard');
     } else {
       setError('Invalid credentials. Please check username and password.');
