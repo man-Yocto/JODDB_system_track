@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle, XCircle } from 'lucide-react';
 import { type QATask } from '../../types';
 
 interface InspectionDialogProps {
@@ -30,10 +30,6 @@ export const InspectionDialog: React.FC<InspectionDialogProps> = ({
   };
 
   if (!isOpen) return null;
-
-  const actualHours = (task.actualTime / 3600).toFixed(2);
-  const standardHours = (task.standardTime / 3600).toFixed(2);
-  const isOvertime = task.actualTime > task.standardTime;
 
   return (
     <>
@@ -71,29 +67,6 @@ export const InspectionDialog: React.FC<InspectionDialogProps> = ({
                   <div className="text-sm text-gray-600">Operation</div>
                   <div className="font-semibold text-gray-800">{task.operationName}</div>
                 </div>
-              </div>
-            </div>
-
-            {/* Timeline */}
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-2">Timeline</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">Start: </span>
-                  <span className="font-medium">{task.startTime}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">End: </span>
-                  <span className="font-medium">{task.endTime}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Technician Notes */}
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-2">Technician Notes</h3>
-              <div className="p-4 bg-gray-50 rounded-lg border">
-                <p className="text-gray-700">{task.technicianNotes}</p>
               </div>
             </div>
 

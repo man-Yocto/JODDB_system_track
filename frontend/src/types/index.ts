@@ -173,20 +173,14 @@ export interface TaskApprovalDecision {
 
 export interface QATask {
   id: string;
-  deviceSerial: string;
-  jobOrderCode: string;
-  jobOrderId: string;
-  technicianId: string;
-  technicianName: string;
   operationName: string;
-  standardTime: number; // seconds
-  actualTime: number; // seconds
-  startTime: string;
-  endTime: string;
-  status: 'done' | 'pending_qa' | 'accepted_by_qa' | 'rework_required';
-  technicianNotes: string;
-  efficiency: number;
-  submittedAt: string;
+  deviceSerial: string;
+  technicianName: string;
+  jobOrderCode: string;
+  status: 'pending_qa' | 'done';
+  qaDecision?: 'accepted' | 'rejected';
+  qaComments?: string;
+  qaInspectedAt?: string;
 }
 
 export interface QAInspection {
