@@ -19,12 +19,40 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
   const [tasks, setTasks] = useState<EnrichedTask[]>([]);
   const [progress, setProgress] = useState<JobOrderProgress | null>(null);
   const [users, setUsers] = useState<any[]>([]);
+  const [exportingPDF, setExportingPDF] = useState(false);
 
   useEffect(() => {
     if (jobId) {
       fetchJobOrderDetails();
     }
   }, [jobId]);
+
+  const handleExportPDF = async () => {
+    if (!jobId) return;
+    
+    setExportingPDF(true);
+    try {
+      // Call PDF export API
+      const pdfBlob = await api.export.exportJobOrderPDF(parseInt(jobId));
+      
+      // Create download link and trigger download
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `job_order_${jobOrder?.order_code || jobId}_report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export PDF:', error);
+      alert('Failed to export PDF report. Please try again.');
+    } finally {
+      setExportingPDF(false);
+    }
+  };
 
   const fetchJobOrderDetails = async () => {
     try {
@@ -129,9 +157,13 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
             {jobOrder.order_code} • Due: {new Date(jobOrder.due_date).toLocaleDateString()}
           </p>
         </div>
-        <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+        <button 
+          onClick={handleExportPDF}
+          disabled={exportingPDF}
+          className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Download className="w-4 h-4 inline mr-2" />
-          Export
+          {exportingPDF ? 'Generating PDF...' : 'Export PDF'}
         </button>
       </div>
 

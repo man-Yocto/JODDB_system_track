@@ -354,6 +354,7 @@ class Inspection(models.Model):
     Quality Inspector reviews of completed tasks.
     """
     DECISION_CHOICES = [
+        ('pending', 'Pending'),  # Added for auto-created inspections awaiting QI review
         ('accepted', 'Accepted'),
         ('rejected', 'Rejected'),
     ]
@@ -372,9 +373,10 @@ class Inspection(models.Model):
         User,
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,  # Allow null/blank for auto-created inspections
         related_name='inspections'
     )
-    decision = models.CharField(max_length=20, choices=DECISION_CHOICES)
+    decision = models.CharField(max_length=20, choices=DECISION_CHOICES, default='pending')  # Default to pending
     comments = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     

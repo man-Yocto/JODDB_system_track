@@ -2,11 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { api, type Task } from '../../services/api';
 import { TechnicianTaskCard } from './TechnicianTaskCard';
 import { QuickActionsBar } from './QuickActionsBar';
-import { TaskTimer } from './TaskTimer';
-import { TaskQueuePreview } from './TaskQueuePreview';
 import { DailyReportModal } from './DailyReportModal';
 import { RefreshCw, AlertCircle, ListChecks, CheckSquare, Square, FileText } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
 
 export const TechnicianDashboard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -133,33 +130,39 @@ export const TechnicianDashboard: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-100 relative pb-20">
-      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="flex items-center justify-between p-4">
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">My Tasks</h1>
-            <p className="text-sm text-gray-600">
-              {selectedTaskIds.size > 0 ? `${selectedTaskIds.size} selected` : activeTask ? 'Working on task' : `${upcomingTasks.length} available`}
-            </p>
+    <div className="h-full flex flex-col bg-gray-50">
+      {/* Compact Fixed Header */}
+      <div className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold text-gray-900">Tasks</h1>
+            <span className="text-sm text-gray-500">
+              {selectedTaskIds.size > 0 
+                ? `${selectedTaskIds.size} selected` 
+                : `${upcomingTasks.length} available`}
+            </span>
           </div>
           <div className="flex gap-2">
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+              title="Refresh"
+              className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors disabled:opacity-50"
             >
-              <RefreshCw className={`w-5 h-5 text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={() => setShowDailyReport(true)}
-              className="p-2 bg-orange-100 text-orange-600 rounded-lg hover:bg-orange-200"
+              title="Daily report"
+              className="p-2 bg-orange-50 hover:bg-orange-100 text-orange-600 rounded-lg transition-colors"
             >
-              <FileText className="w-5 h-5" />
+              <FileText className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        <div className="flex gap-2 px-4 pb-4 overflow-x-auto">
+        {/* Compact Filter Tabs */}
+        <div className="flex gap-2 px-4 pb-2 overflow-x-auto scrollbar-thin">
           {[
             { value: 'all', label: 'All', count: tasks.length },
             { value: 'available', label: 'Available', count: upcomingTasks.length },
@@ -169,75 +172,88 @@ export const TechnicianDashboard: React.FC = () => {
             <button
               key={value}
               onClick={() => setFilter(value as any)}
-              className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap ${ filter === value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600' }`}
+              className={`px-3 py-1.5 rounded-lg font-medium text-xs whitespace-nowrap transition-all ${
+                filter === value 
+                  ? 'bg-blue-600 text-white shadow-sm' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
               {label} ({count})
             </button>
           ))}
         </div>
 
+        {/* Compact Selection Controls */}
         {filteredTasks.length > 0 && (
-          <div className="px-4 pb-4 flex items-center gap-3 border-t border-gray-200 pt-3">
+          <div className="px-4 pb-2 flex items-center gap-2 border-t border-gray-100 pt-2">
             <button
               onClick={toggleSelectAll}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm font-medium"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-medium text-gray-700 transition-colors"
             >
-              {isSelectAllMode ? <>  <CheckSquare className="w-4 h-4 text-blue-600" />Deselect</> : <><Square className="w-4 h-4" />Select</>}
+              {isSelectAllMode ? (
+                <>
+                  <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                  Deselect
+                </>
+              ) : (
+                <>
+                  <Square className="w-3.5 h-3.5" />
+                  Select All
+                </>
+              )}
             </button>
             {selectedTaskIds.size > 0 && (
-              <>
-                <span className="text-sm text-gray-600">{selectedTaskIds.size}</span>
-                <button
-                  onClick={handleStartSelected}
-                  className="ml-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-                >
-                  Start ({selectedTaskIds.size})
-                </button>
-              </>
+              <button
+                onClick={handleStartSelected}
+                className="ml-auto px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-bold transition-all"
+              >
+                Start ({selectedTaskIds.size})
+              </button>
             )}
           </div>
         )}
       </div>
 
-      {activeTask && (
-        <div className="sticky top-[172px] z-10 px-4 pt-4">
-          <TaskTimer task={activeTask} />
-        </div>
-      )}
-
-      {!activeTask && upcomingTasks.length > 0 && selectedTaskIds.size === 0 && (
-        <div className="px-4 pt-4">
-          <TaskQueuePreview tasks={upcomingTasks.slice(0, 3)} />
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto p-4">
-        {filteredTasks.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <ListChecks className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600">No Tasks</h3>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredTasks.map(task => (
-              <div key={task.id} className={`rounded-lg transition ${selectedTaskIds.has(task.id as number) ? 'ring-2 ring-blue-500' : ''}`}>
-                <div className="flex items-start gap-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md">
-                  <input
-                    type="checkbox"
-                    checked={selectedTaskIds.has(task.id as number)}
-                    onChange={() => toggleTaskSelection(task.id as number)}
-                    className="w-5 h-5 mt-2 text-blue-600 rounded cursor-pointer"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <TechnicianTaskCard task={task} onTaskUpdate={handleTaskUpdate} />
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Improved Tasks List */}
+        <div className="p-3">
+          {filteredTasks.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+              <ListChecks className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-base font-semibold text-gray-700 mb-1">No Tasks Found</h3>
+              <p className="text-xs text-gray-500">There are no tasks matching your current filter.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 pb-20">
+              {filteredTasks.map(task => (
+                <div 
+                  key={task.id} 
+                  className={`rounded-lg transition-all ${
+                    selectedTaskIds.has(task.id as number) 
+                      ? 'ring-2 ring-blue-400 shadow-md' 
+                      : 'shadow-sm hover:shadow-md'
+                  }`}
+                >
+                  <div className="flex items-start gap-2 p-2 bg-white rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={selectedTaskIds.has(task.id as number)}
+                      onChange={() => toggleTaskSelection(task.id as number)}
+                      className="w-4 h-4 mt-2 text-blue-600 rounded border-gray-300 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <TechnicianTaskCard task={task} onTaskUpdate={handleTaskUpdate} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Modals */}
       {showDailyReport && (
         <DailyReportModal
           isOpen={showDailyReport}
@@ -249,6 +265,7 @@ export const TechnicianDashboard: React.FC = () => {
         />
       )}
 
+      {/* Quick Actions Bar (Fixed at bottom) */}
       <QuickActionsBar
         hasActiveTask={!!activeTask}
         activeTaskId={activeTask?.id}

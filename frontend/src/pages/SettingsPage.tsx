@@ -1,23 +1,34 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Save, Bell, User as UserIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Save, Bell, User as UserIcon, Palette, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 export const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'notifications'>('profile');
+  const toast = useToast();
+  const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'preferences'>('profile');
   const [isSaving, setIsSaving] = useState(false);
 
-  const [formData, setFormData] = useState({
-    notificationsEmail: true,
-    notificationsWeb: true,
-    notificationsTasks: true,
+  // Load preferences from localStorage
+  const [formData, setFormData] = useState(() => {
+    const saved = localStorage.getItem('userPreferences');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return {
+      notificationsEmail: true,
+      notificationsWeb: true,
+      notificationsTasks: true,
+      fontSize: 'medium',
+      soundEnabled: true,
+    };
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
+    setFormData((prev: any) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
@@ -26,17 +37,34 @@ export const SettingsPage: React.FC = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // TODO: Implement actual save logic via API for settings
-      console.log('Saving settings:', formData);
-      setTimeout(() => {
-        alert('Settings saved successfully!');
-        setIsSaving(false);
-      }, 1000);
+      // Save to localStorage
+      localStorage.setItem('userPreferences', JSON.stringify(formData));
+      
+      // Apply font size setting
+      document.documentElement.classList.remove('text-sm', 'text-base', 'text-lg');
+      if (formData.fontSize === 'small') {
+        document.documentElement.classList.add('text-sm');
+      } else if (formData.fontSize === 'large') {
+        document.documentElement.classList.add('text-lg');
+      }
+      
+      toast.success('Settings saved successfully!');
+      setIsSaving(false);
     } catch (err) {
       console.error('Failed to save settings:', err);
+      toast.error('Failed to save settings');
       setIsSaving(false);
     }
   };
+
+  // Apply font size on mount
+  useEffect(() => {
+    if (formData.fontSize === 'small') {
+      document.documentElement.classList.add('text-sm');
+    } else if (formData.fontSize === 'large') {
+      document.documentElement.classList.add('text-lg');
+    }
+  }, [formData.fontSize]);
 
   return (
     <div className="min-h-screen bg-gray-50 transition-colors duration-200">
@@ -61,6 +89,7 @@ export const SettingsPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow p-4 space-y-2">
               {[
                 { id: 'profile', label: 'Profile', icon: UserIcon },
+                { id: 'preferences', label: 'Preferences', icon: Palette },
                 { id: 'notifications', label: 'Notifications', icon: Bell },
               ].map(({ id, label, icon: Icon }) => (
                 <button
@@ -104,6 +133,60 @@ export const SettingsPage: React.FC = () => {
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <p className="text-sm text-blue-800">
                       <strong>Role:</strong> {user?.role || 'User'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Preferences Settings */}
+              {activeTab === 'preferences' && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-800 mb-4">Display & Accessibility</h2>
+                  </div>
+
+                  {/* Font Size */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Font Size</label>
+                    <div className="flex gap-3">
+                      {['small', 'medium', 'large'].map((size) => (
+                        <button
+                          key={size}
+                          onClick={() => setFormData(prev => ({ ...prev, fontSize: size }))}
+                          className={`flex-1 px-4 py-3 rounded-lg border-2 transition ${
+                            formData.fontSize === size
+                              ? 'border-blue-600 bg-blue-50 text-blue-700 font-medium'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          {size === 'small' && <span className="text-sm">Small</span>}
+                          {size === 'medium' && <span className="text-base">Medium</span>}
+                          {size === 'large' && <span className="text-lg">Large</span>}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Adjust text size for better readability</p>
+                  </div>
+
+                  {/* Sound Effects */}
+                  <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition">
+                    <input
+                      type="checkbox"
+                      name="soundEnabled"
+                      checked={formData.soundEnabled}
+                      onChange={handleInputChange}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Volume2 className="w-5 h-5 text-gray-600" />
+                    <div>
+                      <p className="font-medium text-gray-800">Sound Notifications</p>
+                      <p className="text-sm text-gray-600">Play sounds for notifications and alerts</p>
+                    </div>
+                  </label>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800">
+                      💡 <strong>Tip:</strong> Your preferences are automatically saved to this device.
                     </p>
                   </div>
                 </div>

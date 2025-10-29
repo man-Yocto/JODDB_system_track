@@ -234,7 +234,15 @@ class TechnicianTaskViewSet(
     def end(self, request, pk=None):
         """
         Action for a Technician to end a task.
-        Calculates actual_time_seconds and efficiency, sets end_time and status = 'pending-approval'.
+        Calculates actual_time_seconds and efficiency, sets end_time and status = 'done'.
+        
+        CRITICAL WORKFLOW:
+        1. Mark task as 'done'
+        2. Create Inspection record (status='pending')
+        3. Send notifications to QI, Testing Technician, and Supervisor
+        4. Update device status to 'completed'
+        
+        This ensures QI and Testing Technician see the task in their pending inspection queues.
         """
         task = self.get_object()
         user = request.user
@@ -257,22 +265,79 @@ class TechnicianTaskViewSet(
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 1. Update End Time
-        task.end_time = timezone.now()
-        
-        # 2. Calculate Actual Time
-        time_difference: datetime.timedelta = task.end_time - task.start_time
-        task.actual_time_seconds = int(time_difference.total_seconds())
-        
-        # 3. Set status to pending-approval (waiting for planner review)
-        task.status = 'pending-approval'
-        
-        # 4. Save all updates
-        task.save(update_fields=['end_time', 'actual_time_seconds', 'status', 'updated_at'])
+        # Use atomic transaction to ensure all-or-nothing operation
+        with transaction.atomic():
+            # 1. Update End Time
+            task.end_time = timezone.now()
+            
+            # 2. Calculate Actual Time
+            time_difference: datetime.timedelta = task.end_time - task.start_time
+            task.actual_time_seconds = int(time_difference.total_seconds())
+            
+            # 3. Set status to 'done' (completed and ready for inspection)
+            task.status = 'done'
+            
+            # 4. Save task updates
+            task.save(update_fields=['end_time', 'actual_time_seconds', 'status', 'updated_at'])
 
-        # 5. Update Device status (completed/ready for inspection)
-        task.device.current_status = 'completed'
-        task.device.save(update_fields=['current_status', 'last_updated'])
+            # 5. Update Device status (completed/ready for inspection)
+            task.device.current_status = 'completed'
+            task.device.save(update_fields=['current_status', 'last_updated'])
+
+            # 6. Create Inspection record with 'pending' status
+            inspection = Inspection.objects.create(
+                task=task,
+                device=task.device,
+                inspector=None,  # Will be set when QI/Tester reviews
+                decision='pending',
+                comments='Awaiting quality inspection'
+            )
+
+            # 7. Send notifications to relevant users
+            # Find QI users (quality role)
+            qi_users = User.objects.filter(role='quality', is_active=True)
+            for qi_user in qi_users:
+                create_notification(
+                    user_id=qi_user.id,
+                    type='task_ready_for_inspection',
+                    message=f"Task #{task.id} on device {task.device.serial_number} is ready for quality inspection.",
+                    payload={
+                        'task_id': task.id,
+                        'job_order_code': task.job_order.order_code,
+                        'device_serial': task.device.serial_number,
+                        'inspection_id': inspection.id
+                    }
+                )
+            
+            # Find Testing Technicians (tester role)
+            tester_users = User.objects.filter(role='tester', is_active=True)
+            for tester in tester_users:
+                create_notification(
+                    user_id=tester.id,
+                    type='task_ready_for_testing',
+                    message=f"Task #{task.id} on device {task.device.serial_number} is ready for testing verification.",
+                    payload={
+                        'task_id': task.id,
+                        'job_order_code': task.job_order.order_code,
+                        'device_serial': task.device.serial_number,
+                        'inspection_id': inspection.id
+                    }
+                )
+            
+            # Notify Supervisor
+            supervisors = User.objects.filter(role='supervisor', is_active=True)
+            for supervisor in supervisors:
+                create_notification(
+                    user_id=supervisor.id,
+                    type='task_completed',
+                    message=f"Task #{task.id} completed by {task.technician.full_name}. Device: {task.device.serial_number}",
+                    payload={
+                        'task_id': task.id,
+                        'job_order_code': task.job_order.order_code,
+                        'technician_id': task.technician.id,
+                        'inspection_id': inspection.id
+                    }
+                )
 
         # Return updated task data (serializer will calculate and show efficiency)
         return Response(self.get_serializer(task).data, status=status.HTTP_200_OK)
@@ -650,6 +715,100 @@ class JobOrderMetricsView(APIView):
         serializer.is_valid(raise_exception=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 # -----------------------------------------------------------
+# 5.5 Planner Statistics View (Planning Engineer)
+# -----------------------------------------------------------
+
+class PlannerStatisticsView(APIView):
+    """
+    Provides real-time statistics for the Planner Dashboard.
+    
+    Endpoint: GET /api/v1/planner/statistics/
+    Role Access: Planning Engineer, Admin
+    
+    Returns:
+    - active_job_orders: Count of job orders in progress
+    - due_this_week: Count of job orders due within 7 days
+    - avg_productivity: Average productivity percentage for today
+    - active_technicians: Count of technicians who worked today
+    - total_technicians: Total count of all technicians
+    - technician_utilization: Percentage of technicians currently working
+    - overdue_tasks: Count of tasks past their due date
+    - pending_reviews: Count of tasks awaiting supervisor review
+    """
+    permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'admin'])]
+
+    def get(self, request, format=None):
+        """
+        GET /api/v1/planner/statistics/
+        
+        Returns comprehensive dashboard statistics for planning engineers.
+        """
+        today = timezone.now().date()
+        week_from_now = today + datetime.timedelta(days=7)
+        
+        # 1. Active Job Orders (status='in_progress')
+        active_job_orders = JobOrder.objects.filter(status='in_progress').count()
+        
+        # 2. Job Orders due this week
+        due_this_week = JobOrder.objects.filter(
+            due_date__gte=today,
+            due_date__lte=week_from_now,
+            status__in=['in_progress', 'pending']
+        ).count()
+        
+        # 3. Average Productivity (today's tasks)
+        today_tasks = Task.objects.filter(
+            end_time__date=today,
+            actual_time_seconds__isnull=False,
+            standard_time_seconds__gt=0
+        )
+        
+        if today_tasks.exists():
+            total_standard = sum(t.standard_time_seconds for t in today_tasks)
+            total_actual = sum(t.actual_time_seconds for t in today_tasks)
+            avg_productivity = (total_standard / total_actual * 100) if total_actual > 0 else 0
+        else:
+            avg_productivity = 0
+        
+        # 4. Active Technicians (worked today)
+        active_technicians = Task.objects.filter(
+            start_time__date=today,
+            technician__isnull=False
+        ).values('technician').distinct().count()
+        
+        # 5. Total Technicians (all technician + quality roles)
+        total_technicians = User.objects.filter(
+            role__in=['technician', 'quality', 'tester'],
+            is_active=True
+        ).count()
+        
+        # 6. Technician Utilization
+        technician_utilization = (active_technicians / total_technicians * 100) if total_technicians > 0 else 0
+        
+        # 7. Overdue Tasks
+        overdue_tasks = Task.objects.filter(
+            status__in=['available', 'in_progress'],
+            due_date__lt=today
+        ).count()
+        
+        # 8. Pending Reviews (tasks awaiting supervisor review)
+        pending_reviews = Task.objects.filter(status='pending_supervisor').count()
+        
+        # Prepare response
+        statistics = {
+            'active_job_orders': active_job_orders,
+            'due_this_week': due_this_week,
+            'avg_productivity': round(avg_productivity, 2),
+            'active_technicians': active_technicians,
+            'total_technicians': total_technicians,
+            'technician_utilization': round(technician_utilization, 2),
+            'overdue_tasks': overdue_tasks,
+            'pending_reviews': pending_reviews,
+        }
+        
+        return Response(statistics, status=status.HTTP_200_OK)
+
+# -----------------------------------------------------------
 # 6. Excel Import View (Planning Engineer)
 # -----------------------------------------------------------
 
@@ -868,90 +1027,231 @@ class DailyReportExportView(APIView):
 
 
 # -----------------------------------------------------------
-# Planner Statistics View
+# 8. PDF Report Export View (Planning Engineer & Supervisor)
 # -----------------------------------------------------------
 
-class PlannerStatisticsView(APIView):
+class JobOrderPDFExportView(APIView):
     """
-    Returns comprehensive statistics for the Planner Dashboard.
+    PDF Report Export View for exporting Job Order detailed reports.
     
-    Endpoint: GET /api/v1/planner/statistics/
-    Role Access: Planning Engineer, Admin
+    Endpoint: GET /api/v1/reports/joborder/{id}/export/pdf
+    Role Access: Planning Engineer, Supervisor
+    
+    Generates comprehensive PDF report including:
+    - Job Order summary (code, title, dates, progress)
+    - Device list with status
+    - Task details with technician names, times, efficiency
+    - Quality inspection results
+    - Summary statistics and charts
     """
-    permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'admin'])]
+    permission_classes = [IsAuthenticated, (IsPlanningEngineer | IsSupervisor)]
     
-    def get(self, request, format=None):
+    def get(self, request, id, format=None):
         """
+        Generate and download PDF report for a specific Job Order.
+        
+        Parameters:
+        - id: Job Order ID
+        
         Returns:
-        - active_job_orders: count of job orders with status 'in_progress'
-        - due_this_week: count of job orders due within 7 days
-        - avg_productivity: average productivity across all technicians today
-        - active_technicians: count of technicians who worked today
-        - technician_utilization: percentage of active technicians
-        - overdue_tasks: count of tasks past their due date
-        - pending_reviews: count of tasks pending supervisor review
+        - PDF file download with comprehensive job order report
         """
-        today = timezone.now().date()
-        week_from_now = today + datetime.timedelta(days=7)
+        try:
+            # Import ReportLab libraries
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.lib import colors
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+            from io import BytesIO
+        except ImportError:
+            return Response(
+                {"error": "PDF generation library not installed. Please install reportlab: pip install reportlab"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         
-        # 1. Active Job Orders
-        active_job_orders = JobOrder.objects.filter(
-            status='in_progress'
-        ).count()
+        # 1. Validate Job Order ID
+        try:
+            job_order = JobOrder.objects.get(id=id)
+        except JobOrder.DoesNotExist:
+            return Response(
+                {"error": "Job Order not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
         
-        # 2. Job Orders Due This Week
-        due_this_week = JobOrder.objects.filter(
-            status='in_progress',
-            due_date__lte=week_from_now,
-            due_date__gte=today
-        ).count()
+        # 2. Fetch related data
+        devices = Device.objects.filter(job_order=job_order)
+        tasks = Task.objects.filter(job_order=job_order).select_related('device', 'technician')
+        inspections = Inspection.objects.filter(task__job_order=job_order).select_related('task', 'inspector')
         
-        # 3. Average Productivity (from today's completed tasks)
-        completed_today = Task.objects.filter(
-            status='done',
-            end_time__date=today
-        ).aggregate(
-            total_standard=Sum('standard_time_seconds'),
-            total_actual=Sum('actual_time_seconds')
+        # 3. Calculate summary statistics
+        total_devices = devices.count()
+        completed_devices = devices.filter(current_status='completed').count()
+        rejected_devices = devices.filter(current_status='rejected').count()
+        
+        total_tasks = tasks.count()
+        completed_tasks = tasks.filter(status='done').count()
+        in_progress_tasks = tasks.filter(status='in_progress').count()
+        
+        total_inspections = inspections.count()
+        accepted_inspections = inspections.filter(decision='accepted').count()
+        rejected_inspections = inspections.filter(decision='rejected').count()
+        
+        # Calculate average efficiency
+        completed_with_efficiency = tasks.filter(status='done', actual_time_seconds__isnull=False)
+        if completed_with_efficiency.exists():
+            avg_efficiency = sum([t.calculate_efficiency() or 0 for t in completed_with_efficiency]) / completed_with_efficiency.count()
+        else:
+            avg_efficiency = 0
+        
+        # 4. Create PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=0.75*inch, leftMargin=0.75*inch,
+                                topMargin=1*inch, bottomMargin=0.75*inch)
+        
+        # Container for PDF elements
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#1e40af'),
+            spaceAfter=6,
+            alignment=TA_CENTER
         )
         
-        total_standard = completed_today['total_standard'] or 0
-        total_actual = completed_today['total_actual'] or 0
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#1e40af'),
+            spaceAfter=12,
+            spaceBefore=12
+        )
         
-        # Productivity = (Standard Time / Actual Time) * 100
-        avg_productivity = (total_standard / total_actual * 100) if total_actual > 0 else 0.0
+        # 5. Build PDF content
         
-        # 4. Active Technicians (worked today)
-        active_technicians = Task.objects.filter(
-            start_time__date=today
-        ).values('technician').distinct().count()
+        # Title
+        elements.append(Paragraph("Job Order Report", title_style))
+        elements.append(Spacer(1, 0.2*inch))
         
-        # 5. Total Technicians
-        total_technicians = User.objects.filter(
-            role__in=['technician', 'quality_inspector']
-        ).count()
+        # Job Order Info
+        elements.append(Paragraph("Job Order Information", heading_style))
         
-        # 6. Technician Utilization
-        technician_utilization = (active_technicians / total_technicians * 100) if total_technicians > 0 else 0.0
+        job_info_data = [
+            ['Order Code:', job_order.order_code],
+            ['Title:', job_order.title],
+            ['Description:', job_order.description or 'N/A'],
+            ['Total Devices:', str(total_devices)],
+            ['Due Date:', job_order.due_date.strftime('%Y-%m-%d')],
+            ['Created By:', job_order.created_by.full_name if job_order.created_by else 'N/A'],
+            ['Created At:', job_order.created_at.strftime('%Y-%m-%d %H:%M')],
+            ['Status:', job_order.get_status_display()],
+        ]
         
-        # 7. Overdue Tasks (tasks from job orders past due date that aren't done)
-        overdue_tasks = Task.objects.filter(
-            job_order__due_date__lt=today,
-            status__in=['available', 'in_progress', 'pending_supervisor']
-        ).count()
+        job_info_table = Table(job_info_data, colWidths=[2*inch, 4*inch])
+        job_info_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e5e7eb')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        elements.append(job_info_table)
+        elements.append(Spacer(1, 0.3*inch))
         
-        # 8. Pending Reviews (tasks waiting for supervisor review)
-        pending_reviews = Task.objects.filter(
-            status='pending_supervisor'
-        ).count()
+        # Summary Statistics
+        elements.append(Paragraph("Summary Statistics", heading_style))
         
-        return Response({
-            "active_job_orders": active_job_orders,
-            "due_this_week": due_this_week,
-            "avg_productivity": round(avg_productivity, 2),
-            "active_technicians": active_technicians,
-            "total_technicians": total_technicians,
-            "technician_utilization": round(technician_utilization, 2),
-            "overdue_tasks": overdue_tasks,
-            "pending_reviews": pending_reviews,
-        })
+        summary_data = [
+            ['Metric', 'Value'],
+            ['Progress', f"{completed_devices}/{total_devices} devices ({int(completed_devices/total_devices*100) if total_devices > 0 else 0}%)"],
+            ['Completed Tasks', f"{completed_tasks}/{total_tasks}"],
+            ['In Progress Tasks', str(in_progress_tasks)],
+            ['Rejected Devices', str(rejected_devices)],
+            ['Total Inspections', str(total_inspections)],
+            ['Accepted Inspections', str(accepted_inspections)],
+            ['Rejected Inspections', str(rejected_inspections)],
+            ['Average Efficiency', f"{avg_efficiency:.1f}%"],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[3*inch, 3*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f4f6')]),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Tasks Details
+        elements.append(Paragraph("Task Details", heading_style))
+        
+        task_data = [['Task ID', 'Device', 'Operation', 'Technician', 'Status', 'Efficiency']]
+        
+        for task in tasks[:50]:  # Limit to 50 tasks to avoid PDF size issues
+            technician_name = task.technician.full_name if task.technician else 'Unassigned'
+            device_serial = task.device.serial_number if task.device else f"Device #{task.device_id}"
+            efficiency = task.calculate_efficiency()
+            efficiency_str = f"{efficiency:.1f}%" if efficiency else 'N/A'
+            
+            task_data.append([
+                str(task.id),
+                device_serial,
+                task.operation_name[:30],  # Truncate long names
+                technician_name,
+                task.get_status_display(),
+                efficiency_str
+            ])
+        
+        if len(tasks) > 50:
+            task_data.append(['...', f'({len(tasks) - 50} more tasks)', '', '', '', ''])
+        
+        task_table = Table(task_data, colWidths=[0.6*inch, 1.2*inch, 1.8*inch, 1.2*inch, 1*inch, 0.8*inch])
+        task_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f4f6')]),
+        ]))
+        elements.append(task_table)
+        
+        # Footer
+        elements.append(Spacer(1, 0.5*inch))
+        footer_text = f"Generated on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')} | JODDB System - Aselsan Middle East"
+        footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, 
+                                       textColor=colors.grey, alignment=TA_CENTER)
+        elements.append(Paragraph(footer_text, footer_style))
+        
+        # 6. Build PDF
+        doc.build(elements)
+        
+        # 7. Prepare response
+        buffer.seek(0)
+        response = HttpResponse(buffer.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="job_order_{job_order.order_code}_report.pdf"'
+        
+        return response

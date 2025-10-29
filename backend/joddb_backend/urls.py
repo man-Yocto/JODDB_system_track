@@ -33,12 +33,13 @@ from core.views import (
     UserManagementViewSet,
     TechnicianMetricsView,
     JobOrderMetricsView,
+    PlannerStatisticsView,  # NEW: Planner statistics
     ExcelImportView,
     DailyReportExportView,
     InspectionViewSet,
     SupervisorReviewViewSet,
     TaskStatusSummaryView,
-    PlannerStatisticsView,
+    JobOrderPDFExportView,  # NEW: PDF export
 )
 
 
@@ -75,11 +76,14 @@ urlpatterns = [
     path('api/v1/metrics/technician/<int:id>/', TechnicianMetricsView.as_view(), name='technician-metrics'),
     path('api/v1/metrics/job-order/<int:id>/', JobOrderMetricsView.as_view(), name='job-order-metrics'),
     
-    # Planner statistics
+    # Planner statistics endpoint
     path('api/v1/planner/statistics/', PlannerStatisticsView.as_view(), name='planner-statistics'),
     
     # Data Import/Export endpoints
     path('api/v1/data/import/job-order/', ExcelImportView.as_view(), name='import-job-orders'),
     path('api/v1/data/export/daily-report/', DailyReportExportView.as_view(), name='export-daily-report'),
     path('api/v1/tasks/summary/', TaskStatusSummaryView.as_view(), name='task-summary'),
+    
+    # PDF Report Export
+    path('api/v1/reports/joborder/<int:id>/export/pdf', JobOrderPDFExportView.as_view(), name='export-job-order-pdf'),
 ]

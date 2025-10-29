@@ -27,43 +27,51 @@ const EndTaskModal: React.FC<EndTaskModalProps> = ({ isOpen, onClose, onSubmit, 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-in">
         <div className="p-6">
-          <h3 className="text-xl font-bold text-gray-800 mb-4">End Task</h3>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900">Complete Task</h3>
+          </div>
           
           <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-                Task Notes (Optional)
+            <div className="mb-6">
+              <label htmlFor="notes" className="block text-sm font-semibold text-gray-700 mb-2">
+                Task Notes <span className="text-gray-400 font-normal">(Optional)</span>
               </label>
               <textarea
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none transition-all"
                 rows={4}
-                placeholder="Add any notes about the completed task..."
+                placeholder="Add any notes about the completed task, issues encountered, or observations..."
               />
+              <p className="text-xs text-gray-500 mt-1">
+                {notes.length} characters
+              </p>
             </div>
 
-            <div className="flex justify-end gap-3">
+            <div className="flex gap-3">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
+                className="flex-1 px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-all font-semibold disabled:opacity-50 active:scale-95"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-2"
+                className="flex-1 px-5 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 transition-all disabled:opacity-50 flex items-center justify-center gap-2 font-bold shadow-lg active:scale-95"
               >
                 {isSubmitting ? (
                   <>
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -71,8 +79,8 @@ const EndTaskModal: React.FC<EndTaskModalProps> = ({ isOpen, onClose, onSubmit, 
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="w-4 h-4" />
-                    Complete Task
+                    <CheckCircle className="w-5 h-5" />
+                    Complete
                   </>
                 )}
               </button>
@@ -91,41 +99,42 @@ export const TechnicianTaskCard: React.FC<TechnicianTaskCardProps> = ({ task, on
   const [showEndModal, setShowEndModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Get status badge styling
+  // Get compact status badge styling
   const getStatusBadge = () => {
     const statusConfig: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
       'available': {
         bg: 'bg-yellow-100',
-        text: 'text-yellow-800',
-        icon: <Clock className="w-4 h-4" />,
+        text: 'text-yellow-700',
+        icon: <Clock className="w-3 h-3" />,
       },
       'in_progress': {
         bg: 'bg-blue-100',
-        text: 'text-blue-800',
-        icon: <Play className="w-4 h-4" />,
+        text: 'text-blue-700',
+        icon: <Play className="w-3 h-3" />,
       },
       'done': {
         bg: 'bg-green-100',
-        text: 'text-green-800',
-        icon: <CheckCircle className="w-4 h-4" />,
+        text: 'text-green-700',
+        icon: <CheckCircle className="w-3 h-3" />,
       },
       'completed': {
         bg: 'bg-green-100',
-        text: 'text-green-800',
-        icon: <CheckCircle className="w-4 h-4" />,
+        text: 'text-green-700',
+        icon: <CheckCircle className="w-3 h-3" />,
       },
       'rejected': {
         bg: 'bg-red-100',
-        text: 'text-red-800',
-        icon: <AlertCircle className="w-4 h-4" />,
+        text: 'text-red-700',
+        icon: <AlertCircle className="w-3 h-3" />,
       },
     };
 
     const config = statusConfig[task.status] || statusConfig['available'];
+    const statusText = task.status.replace('_', ' ');
     return (
-      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${config.bg} ${config.text}`}>
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
         {config.icon}
-        {task.status.replace('_', ' ').toUpperCase()}
+        {statusText.charAt(0).toUpperCase() + statusText.slice(1)}
       </span>
     );
   };
@@ -189,72 +198,75 @@ export const TechnicianTaskCard: React.FC<TechnicianTaskCardProps> = ({ task, on
 
   return (
     <>
-      <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4 mb-4 hover:shadow-lg transition-shadow">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-3">
-          <div>
-            <h3 className="text-lg font-bold text-gray-800">Task #{task.id}</h3>
-            <p className="text-sm text-gray-500">JO #{task.job_order}</p>
+      <div className="w-full">
+        {/* Compact Header */}
+        <div className="flex justify-between items-center mb-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900">Task #{task.id}</h3>
+            <span className="text-xs text-gray-400">•</span>
+            <span className="text-xs text-gray-500">JO #{task.job_order}</span>
           </div>
           {getStatusBadge()}
         </div>
 
-        {/* Task Details */}
-        <div className="space-y-2 mb-4">
+        {/* Compact Task Details */}
+        <div className="space-y-2 mb-3">
           <div>
-            <span className="text-xs font-semibold text-gray-600 uppercase">Operation:</span>
-            <p className="text-sm text-gray-800">{task.operation_name}</p>
+            <p className="text-sm text-gray-900 font-medium">{task.operation_name}</p>
           </div>
 
-          <div>
-            <span className="text-xs font-semibold text-gray-600 uppercase">Device Serial:</span>
-            <p className="text-sm text-gray-800 font-mono">{task.device_serial || `Device #${task.device}`}</p>
-          </div>
-
-          {task.technician_name && (
-            <div>
-              <span className="text-xs font-semibold text-gray-600 uppercase">Technician:</span>
-              <p className="text-sm text-gray-800">{task.technician_name}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
-            <div>
-              <span className="text-xs font-semibold text-gray-600 uppercase">Standard Time:</span>
-              <p className="text-sm text-gray-800">{formatTime(task.standard_time_seconds)}</p>
-            </div>
-            {task.actual_time_seconds && (
-              <div>
-                <span className="text-xs font-semibold text-gray-600 uppercase">Actual Time:</span>
-                <p className="text-sm text-gray-800">{formatTime(task.actual_time_seconds)}</p>
-              </div>
+          <div className="flex items-center gap-2 text-xs text-gray-600">
+            <span className="font-mono bg-gray-100 px-2 py-0.5 rounded">
+              {task.device_serial || `Device #${task.device}`}
+            </span>
+            {task.technician_name && (
+              <>
+                <span>•</span>
+                <span>{task.technician_name}</span>
+              </>
             )}
           </div>
 
-          {task.efficiency && (
+          <div className="flex items-center justify-between text-xs pt-1.5 border-t border-gray-100">
             <div>
-              <span className="text-xs font-semibold text-gray-600 uppercase">Efficiency:</span>
-              <p className={`text-sm font-bold ${task.efficiency >= 75 ? 'text-green-600' : 'text-red-600'}`}>
-                {task.efficiency.toFixed(2)}%
-              </p>
+              <span className="text-gray-500">Standard:</span>
+              <span className="ml-1 font-medium text-gray-700">{formatTime(task.standard_time_seconds)}</span>
             </div>
-          )}
+            {task.actual_time_seconds && (
+              <div>
+                <span className="text-gray-500">Actual:</span>
+                <span className="ml-1 font-medium text-gray-700">{formatTime(task.actual_time_seconds)}</span>
+              </div>
+            )}
+            {task.efficiency && (
+              <div>
+                <span className="text-gray-500">Eff:</span>
+                <span className={`ml-1 font-bold ${
+                  task.efficiency >= 90 ? 'text-green-600' : 
+                  task.efficiency >= 75 ? 'text-yellow-600' : 
+                  'text-red-600'
+                }`}>
+                  {task.efficiency.toFixed(0)}%
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Error Message */}
+        {/* Compact Error Message */}
         {error && (
-          <div className="mb-3 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-xs">
-            {error}
+          <div className="mb-2 p-2 bg-red-50 border border-red-200 text-red-700 rounded text-xs">
+            ⚠️ {error}
           </div>
         )}
 
-        {/* Action Buttons */}
+        {/* Compact Action Buttons */}
         <div className="flex gap-2">
           {task.status === 'available' && (
             <button
               onClick={handleStart}
               disabled={isStarting}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
+              className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 text-sm font-semibold"
             >
               {isStarting ? (
                 <>
@@ -267,7 +279,7 @@ export const TechnicianTaskCard: React.FC<TechnicianTaskCardProps> = ({ task, on
               ) : (
                 <>
                   <Play className="w-4 h-4" />
-                  Start Task
+                  Start
                 </>
               )}
             </button>
@@ -277,29 +289,35 @@ export const TechnicianTaskCard: React.FC<TechnicianTaskCardProps> = ({ task, on
             <button
               onClick={handleEndClick}
               disabled={isEnding}
-              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
+              className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 text-sm font-semibold"
             >
               <Square className="w-4 h-4" />
-              End Task
+              End
             </button>
           )}
 
           {(task.status === 'done' || task.status === 'completed') && (
-            <div className="flex-1 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-center font-semibold flex items-center justify-center gap-2">
+            <div className="flex-1 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-center text-sm font-semibold flex items-center justify-center gap-1.5">
               <CheckCircle className="w-4 h-4" />
-              Task Completed
+              Completed
             </div>
           )}
         </div>
 
-        {/* Timestamps */}
+        {/* Compact Timestamps */}
         {(task.start_time || task.end_time) && (
-          <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500 space-y-1">
+          <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-3 text-xs text-gray-500">
             {task.start_time && (
-              <div>Started: {new Date(task.start_time).toLocaleString()}</div>
+              <div className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                <span>{new Date(task.start_time).toLocaleTimeString()}</span>
+              </div>
             )}
             {task.end_time && (
-              <div>Ended: {new Date(task.end_time).toLocaleString()}</div>
+              <div className="flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" />
+                <span>{new Date(task.end_time).toLocaleTimeString()}</span>
+              </div>
             )}
           </div>
         )}

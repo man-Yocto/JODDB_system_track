@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TechnicianPage } from './pages/TechnicianPage';
@@ -14,9 +14,12 @@ import { JobTemplatesPage } from './pages/JobTemplatesPage';
 import "./App.css";
 import { SettingsPage } from './pages/SettingsPage';
 import { type UserRole } from './types';
+import { BackToTop } from './components/BackToTop';
+import { MobileBottomNav } from './components/MobileBottomNav';
 
 /**
  * Main Application Component
+ * Enhanced with Toast notifications, Back to Top button, and Mobile Navigation
  * Handles routing for all user roles with dedicated pages
  */
 
@@ -46,12 +49,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const roleRoutes: Record<UserRole, string> = {
-      technician: '/dashboard',
-      supervisor: '/dashboard',
+      technician: '/technician',
+      supervisor: '/supervisor',
       planning: '/planner',
-      quality: '/dashboard',
-      test_technician: '/dashboard',
-      tester: '/dashboard',
+      quality: '/quality',
+      test_technician: '/test-technician',
+      tester: '/tester',
     };
 
     if (user) {
@@ -63,10 +66,16 @@ const App: React.FC = () => {
   }, [user]);
 
   return (
-    <div className="app-container">
+    <div className="app-container animate-fadeIn">
       <Router>
         <div className="flex h-screen bg-gray-100">
           <main className="flex-1 flex flex-col overflow-hidden">
+            {/* Back to Top Button - Global */}
+            <BackToTop />
+            
+            {/* Mobile Bottom Navigation - Shows only on mobile */}
+            <MobileBottomNav />
+            
             <Routes>
               <Route path="/" element={<LoginPage />} />
               <Route path="/dashboard" element={
@@ -100,6 +109,18 @@ const App: React.FC = () => {
                   </ProtectedRoute>
                 } 
               />
+              <Route path="/quality" element={
+                  <ProtectedRoute allowedRoles={['quality']}>
+                    <QualityPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route path="/test-technician" element={
+                  <ProtectedRoute allowedRoles={['test_technician']}>
+                    <TestTechnicianPage />
+                  </ProtectedRoute>
+                } 
+              />
               <Route path="/tester" element={
                   <ProtectedRoute allowedRoles={['tester']}>
                     <TesterPage />
@@ -125,6 +146,12 @@ const App: React.FC = () => {
               <Route path="/tasks" element={
                   <ProtectedRoute allowedRoles={['technician', 'quality', 'supervisor', 'planning', 'test_technician', 'tester']}>
                     <TaskPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route path="/settings" element={
+                  <ProtectedRoute allowedRoles={['technician', 'quality', 'supervisor', 'planning', 'test_technician', 'tester']}>
+                    <SettingsPage />
                   </ProtectedRoute>
                 } 
               />

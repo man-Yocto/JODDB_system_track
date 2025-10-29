@@ -31,13 +31,13 @@ export const TechnicianPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="h-screen flex flex-col bg-gray-100">
       <Header 
         title="Technician Dashboard" 
         subtitle="Manage your tasks and operations"
         onLogout={handleLogout} 
       />
-      <main className="h-[calc(100vh-65px)]">
+      <main className="flex-1 overflow-hidden">
         <TechnicianDashboard />
       </main>
     </div>

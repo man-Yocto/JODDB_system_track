@@ -12,9 +12,11 @@ export const LoginPage: React.FC = () => {
       // Redirect based on user role
       const roleRoutes: Record<string, string> = {
         technician: '/technician',
-        quality_inspector: '/quality',
+        quality: '/quality',
         supervisor: '/supervisor',
-        planner: '/planner',
+        planning: '/planner',
+        test_technician: '/test-technician',
+        tester: '/tester',
       };
       
       const route = roleRoutes[user.role] || '/dashboard';

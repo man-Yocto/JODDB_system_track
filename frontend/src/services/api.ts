@@ -527,6 +527,31 @@ export const exportAPI = {
 
     return response.data;
   },
+
+  /**
+   * Export Job Order PDF Report
+   * GET /api/v1/reports/joborder/{id}/export/pdf
+   * 
+   * Generates comprehensive PDF report for a specific job order including:
+   * - Job order details (code, title, dates, progress)
+   * - Device list with status
+   * - Task details (technician, times, efficiency)
+   * - Quality inspection results
+   * - Summary statistics
+   * 
+   * @param jobOrderId - The ID of the job order to export
+   * @returns Promise<Blob> - PDF file as Blob for download
+   */
+  exportJobOrderPDF: async (jobOrderId: number): Promise<Blob> => {
+    const response = await axiosInstance.get(
+      `/api/v1/reports/joborder/${jobOrderId}/export/pdf`,
+      {
+        responseType: 'blob', // Important: tell axios to expect binary data
+      }
+    );
+
+    return response.data;
+  },
 };
 
 // =======================
