@@ -18,6 +18,8 @@ class Command(BaseCommand):
              'last_name': 'Technician', 'role': 'technician'},
             {'username': 'tech_2', 'email': 'tech2@joddb.local', 'first_name': 'Omar',
              'last_name': 'Technician', 'role': 'technician'},
+            {'username': 'tester_1', 'email': 'tester1@joddb.local', 'first_name': 'Sara',
+             'last_name': 'Tester', 'role': 'tester'},
             {'username': 'admin', 'email': 'admin@joddb.local', 'first_name': 'System',
              'last_name': 'Admin', 'role': 'admin', 'is_staff': True, 'is_superuser': True},
         ]

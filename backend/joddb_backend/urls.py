@@ -26,8 +26,10 @@ from core.views import UserRegistrationView # Import the new view
 from core.serializers_auth import CustomTokenObtainPairView  # Custom login view
 from rest_framework.routers import DefaultRouter
 from core.views import (
+    JobViewSet,
+    ProcessViewSet,
     JobOrderViewSet, 
-    TechnicianTaskViewSet, 
+    TechnicianTaskViewSet,
     UserManagementViewSet,
     TechnicianMetricsView,
     JobOrderMetricsView,
@@ -35,13 +37,17 @@ from core.views import (
     DailyReportExportView,
     InspectionViewSet,
     SupervisorReviewViewSet,
+    TaskStatusSummaryView,
+    PlannerStatisticsView,
 )
 
 
 # Router for ViewSets
 router = DefaultRouter()
+router.register(r'jobs', JobViewSet)
+router.register(r'processes', ProcessViewSet)
 router.register(r'job-orders', JobOrderViewSet)
-router.register(r'tasks', TechnicianTaskViewSet, basename='task') # basename needed for custom actions
+router.register(r'tasks', TechnicianTaskViewSet, basename='task')
 router.register(r'users', UserManagementViewSet, basename='user-management')
 router.register(r'inspections', InspectionViewSet, basename='inspection')
 router.register(r'supervisor-reviews', SupervisorReviewViewSet, basename='supervisor-review')
@@ -69,7 +75,11 @@ urlpatterns = [
     path('api/v1/metrics/technician/<int:id>/', TechnicianMetricsView.as_view(), name='technician-metrics'),
     path('api/v1/metrics/job-order/<int:id>/', JobOrderMetricsView.as_view(), name='job-order-metrics'),
     
+    # Planner statistics
+    path('api/v1/planner/statistics/', PlannerStatisticsView.as_view(), name='planner-statistics'),
+    
     # Data Import/Export endpoints
-    path('api/v1/data/import/job-order/', ExcelImportView.as_view(), name='excel-import'),
-    path('api/v1/data/export/daily-report/', DailyReportExportView.as_view(), name='daily-report-export'),
+    path('api/v1/data/import/job-order/', ExcelImportView.as_view(), name='import-job-orders'),
+    path('api/v1/data/export/daily-report/', DailyReportExportView.as_view(), name='export-daily-report'),
+    path('api/v1/tasks/summary/', TaskStatusSummaryView.as_view(), name='task-summary'),
 ]

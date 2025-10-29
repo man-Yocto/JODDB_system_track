@@ -5,6 +5,56 @@ from django.core.validators import MinValueValidator
 from django.utils import timezone
 
 
+class Job(models.Model):
+    """
+    Represents a predefined job template, like 'iPhone 15 Assembly'.
+    This is the parent for a set of processes.
+    """
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'jobs'
+        ordering = ['name']
+        verbose_name = 'Job'
+        verbose_name_plural = 'Jobs'
+
+    def __str__(self):
+        return self.name
+
+
+class Process(models.Model):
+    """
+    A predefined process (task template) that belongs to a Job.
+    e.g., 'Step 1: Assemble Part A'.
+    """
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='processes')
+    operation_name = models.CharField(max_length=200)
+    standard_time_seconds = models.IntegerField(validators=[MinValueValidator(1)])
+    task_type = models.CharField(
+        max_length=50,
+        choices=[
+            ('technician', 'Technician Task'),
+            ('quality', 'Quality Inspection Task'),
+            ('tester', 'Tester Task'),
+        ],
+        default='technician'
+    )
+    order = models.PositiveIntegerField(help_text="The order of this process in the job's workflow.")
+
+    class Meta:
+        db_table = 'processes'
+        ordering = ['job', 'order']
+        unique_together = ('job', 'order')
+        verbose_name = 'Process'
+        verbose_name_plural = 'Processes'
+
+    def __str__(self):
+        return f"{self.job.name} - Step {self.order}: {self.operation_name}"
+
+
 class User(AbstractUser):
     """
     Custom User model extending Django's AbstractUser.
@@ -12,10 +62,11 @@ class User(AbstractUser):
     """
     ROLE_CHOICES = [
         ('technician', 'Technician'),
-        ('quality', 'Quality Inspector'),
+        ('quality_inspector', 'Quality Inspector'),
         ('supervisor', 'Supervisor'),
         ('planning', 'Planning Engineer'),
         ('admin', 'System Admin'),
+        ('tester', 'Tester'),
     ]
     
     role = models.CharField(
@@ -40,6 +91,14 @@ class JobOrder(models.Model):
     Job Orders created by Planning Engineers.
     Represents a batch of devices to be assembled.
     """
+    job = models.ForeignKey(
+        Job,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='job_orders',
+        help_text="The predefined job template for this order."
+    )
     STATUS_CHOICES = [
         ('available', 'Available'),
         ('in_progress', 'In Progress'),
@@ -136,6 +195,20 @@ class Task(models.Model):
         ('done', 'Done'),  # ← Final completed status
     ]
     
+    TASK_TYPE_CHOICES = [
+        ('technician', 'Technician Task'),
+        ('quality', 'Quality Inspection Task'),
+        ('tester', 'Tester Task'),
+    ]
+    
+    process = models.ForeignKey(
+        Process,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='tasks',
+        help_text="The process template for this task."
+    )
     device = models.ForeignKey(
         Device,
         on_delete=models.CASCADE,
@@ -154,6 +227,13 @@ class Task(models.Model):
     )
     operation_name = models.CharField(max_length=200)
     standard_time_seconds = models.IntegerField(validators=[MinValueValidator(1)])
+    
+    task_type = models.CharField(
+        max_length=50,
+        choices=TASK_TYPE_CHOICES,
+        default='technician',
+        db_index=True
+    )
     
     start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)

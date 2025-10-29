@@ -94,8 +94,28 @@ export interface Task {
   updated_at: string;
 }
 
+export interface Process {
+  id: number;
+  job: number;
+  operation_name: string;
+  standard_time_seconds: number;
+  task_type: 'technician' | 'quality' | 'tester';
+  order: number;
+}
+
+export interface Job {
+  id: number;
+  name: string;
+  description?: string;
+  processes: Process[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface JobOrder {
   id: number;
+  job?: number;
+  job_name?: string;
   order_code: string;
   title: string;
   description?: string;
@@ -127,6 +147,17 @@ export interface TechnicianMetrics {
   average_efficiency: number;
   utilization: number;
   tasks_completed: number;
+}
+
+export interface PlannerStatistics {
+  active_job_orders: number;
+  due_this_week: number;
+  avg_productivity: number;
+  active_technicians: number;
+  total_technicians: number;
+  technician_utilization: number;
+  overdue_tasks: number;
+  pending_reviews: number;
 }
 
 export interface Inspection {
@@ -275,6 +306,22 @@ export const taskAPI = {
   },
 
   /**
+   * Create a new task
+   * POST /api/v1/tasks/
+   */
+  createTask: async (taskData: {
+    job_order: number;
+    process?: number;
+    device_serial: string;
+    task_type: string;
+    operation_name: string;
+    estimated_time?: number;
+  }): Promise<Task> => {
+    const response = await axiosInstance.post('/api/v1/tasks/', taskData);
+    return handleResponse<Task>(response);
+  },
+
+  /**
    * Start a task (Technician)
    * PATCH /api/v1/tasks/{id}/start/
    */
@@ -323,13 +370,12 @@ export const jobOrderAPI = {
    * POST /api/v1/job-orders/
    */
   createJobOrder: async (data: {
+    job?: number;
     order_code: string;
     title: string;
     description?: string;
-    operation_name?: string;
     due_date: string;
-    standard_time_seconds: number;
-    device_serials: string[];
+    total_devices: number;
   }): Promise<JobOrder> => {
     const response = await axiosInstance.post('/api/v1/job-orders/', data);
     return handleResponse<JobOrder>(response);
@@ -390,6 +436,15 @@ export const metricsAPI = {
       `/api/v1/metrics/job-order/${jobOrderId}/`
     );
     return handleResponse<JobOrderProgress>(response);
+  },
+
+  /**
+   * Get planner dashboard statistics
+   * GET /api/v1/planner/statistics/
+   */
+  getPlannerStatistics: async (): Promise<PlannerStatistics> => {
+    const response = await axiosInstance.get('/api/v1/planner/statistics/');
+    return handleResponse<PlannerStatistics>(response);
   },
 };
 
@@ -526,6 +581,134 @@ export const userAPI = {
   },
 };
 
+// =======================
+// Job APIs (Templates)
+// =======================
+
+export const jobAPI = {
+  /**
+   * Get all job templates
+   * GET /api/v1/jobs/
+   */
+  getJobs: async (): Promise<Job[]> => {
+    const response = await axiosInstance.get('/api/v1/jobs/');
+    return handlePaginatedResponse<Job>(response);
+  },
+
+  /**
+   * Get single job with all processes
+   * GET /api/v1/jobs/{id}/
+   */
+  getJob: async (jobId: number): Promise<Job> => {
+    const response = await axiosInstance.get(`/api/v1/jobs/${jobId}/`);
+    return handleResponse<Job>(response);
+  },
+
+  /**
+   * Create a new job template with its processes
+   * POST /api/v1/jobs/
+   */
+  createJob: async (data: {
+    name: string;
+    description?: string;
+    processes: Array<{
+      operation_name: string;
+      standard_time_seconds: number;
+      task_type: 'technician' | 'quality' | 'tester';
+      order: number;
+    }>;
+  }): Promise<Job> => {
+    const response = await axiosInstance.post('/api/v1/jobs/', data);
+    return handleResponse<Job>(response);
+  },
+
+  /**
+   * Update a job template's details (name/description)
+   * PATCH /api/v1/jobs/{id}/
+   */
+  updateJob: async (jobId: number, data: { name?: string; description?: string }): Promise<Job> => {
+    const response = await axiosInstance.patch(`/api/v1/jobs/${jobId}/`, data);
+    return handleResponse<Job>(response);
+  },
+
+  /**
+   * Delete a job template
+   * DELETE /api/v1/jobs/{id}/
+   */
+  deleteJob: async (jobId: number): Promise<void> => {
+    await axiosInstance.delete(`/api/v1/jobs/${jobId}/`);
+  },
+};
+
+// =======================
+// Process APIs (Task Templates)
+// =======================
+
+export const processAPI = {
+  /**
+   * Get all processes
+   * GET /api/v1/processes/
+   */
+  getProcesses: async (jobId?: number): Promise<Process[]> => {
+    const params = jobId ? `?job_id=${jobId}` : '';
+    const response = await axiosInstance.get(`/api/v1/processes/${params}`);
+    return handlePaginatedResponse<Process>(response);
+  },
+
+  /**
+   * Get single process
+   * GET /api/v1/processes/{id}/
+   */
+  getProcess: async (processId: number): Promise<Process> => {
+    const response = await axiosInstance.get(`/api/v1/processes/${processId}/`);
+    return handleResponse<Process>(response);
+  },
+
+  /**
+   * Create a new process for a job
+   * POST /api/v1/processes/
+   */
+  createProcess: async (data: {
+    job: number;
+    operation_name: string;
+    standard_time_seconds: number;
+    task_type: 'technician' | 'quality' | 'tester';
+    order: number;
+  }): Promise<Process> => {
+    const response = await axiosInstance.post('/api/v1/processes/', data);
+    return handleResponse<Process>(response);
+  },
+
+  /**
+   * Update an existing process
+   * PATCH /api/v1/processes/{id}/
+   */
+  updateProcess: async (processId: number, data: Partial<{
+    operation_name: string;
+    standard_time_seconds: number;
+    task_type: 'technician' | 'quality' | 'tester';
+    order: number;
+  }>): Promise<Process> => {
+    const response = await axiosInstance.patch(`/api/v1/processes/${processId}/`, data);
+    return handleResponse<Process>(response);
+  },
+
+  /**
+   * Delete a process
+   * DELETE /api/v1/processes/{id}/
+   */
+  deleteProcess: async (processId: number): Promise<void> => {
+    await axiosInstance.delete(`/api/v1/processes/${processId}/`);
+  },
+};
+
+export const taskSummaryAPI = {
+  getTaskSummary: async (): Promise<any> => {
+    const response = await axiosInstance.get('/api/v1/tasks/summary/');
+    return handleResponse<any>(response);
+  },
+};
+
 // Export all APIs
 export const api = {
   auth: authAPI,
@@ -536,6 +719,9 @@ export const api = {
   inspections: inspectionAPI,
   supervisorReviews: supervisorReviewAPI,
   export: exportAPI,
+  taskSummary: taskSummaryAPI,
+  jobs: jobAPI,
+  processes: processAPI,
 };
 
 export default api;

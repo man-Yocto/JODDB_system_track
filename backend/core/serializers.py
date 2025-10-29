@@ -5,10 +5,71 @@ from core.notifications.utils import create_notification
 from django.db import transaction
 from django.core.validators import MinValueValidator
 from rest_framework.exceptions import ValidationError
-from core.models import JobOrder, Device, Task , Inspection, SupervisorReview # Assuming start_time/end_time/actual_time_seconds are added to Task model
+from core.models import JobOrder, Device, Task , Inspection, SupervisorReview, Job, Process
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from core.models import User, JobOrder, Device, Task
+
+
+# -----------------------------------------------------------
+# 0. Job and Process Serializers
+# -----------------------------------------------------------
+
+class ProcessSerializer(serializers.ModelSerializer):
+    """Serializer for Process templates."""
+    class Meta:
+        model = Process
+        fields = ['id', 'job', 'operation_name', 'standard_time_seconds', 'task_type', 'order']
+        read_only_fields = ['id']
+
+
+class NestedProcessSerializer(serializers.ModelSerializer):
+    """Serializer for Process templates when nested in Job creation (job field excluded)."""
+    class Meta:
+        model = Process
+        fields = ['operation_name', 'standard_time_seconds', 'task_type', 'order']
+
+
+class JobSerializer(serializers.ModelSerializer):
+    """Serializer for Job templates with their processes."""
+    processes = ProcessSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Job
+        fields = ['id', 'name', 'description', 'processes', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'processes']
+
+
+class JobCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating Job templates with nested processes."""
+    processes = NestedProcessSerializer(many=True, required=False)
+    
+    class Meta:
+        model = Job
+        fields = ['id', 'name', 'description', 'processes', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        """
+        Create a new job along with its processes.
+        """
+        processes_data = validated_data.pop('processes', [])
+        job = Job.objects.create(**validated_data)
+        
+        # Create the processes for this job
+        for process_data in processes_data:
+            Process.objects.create(job=job, **process_data)
+        
+        return job
+    
+    def update(self, instance, validated_data):
+        """
+        Update a job. Note: Processes are managed separately via ProcessViewSet.
+        """
+        instance.name = validated_data.get('name', instance.name)
+        instance.description = validated_data.get('description', instance.description)
+        instance.save()
+        return instance
 
 
 # -----------------------------------------------------------
@@ -20,40 +81,20 @@ class JobOrderSerializer(serializers.ModelSerializer):
     Standard serializer for JobOrder retrieval (list/detail).
     """
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    job_name = serializers.CharField(source='job.name', read_only=True)
 
     class Meta:
         model = JobOrder
-        fields = ['id', 'order_code', 'title', 'due_date', 'total_devices', 
+        fields = ['id', 'job', 'job_name', 'order_code', 'title', 'due_date', 'total_devices', 
                   'status', 'created_at', 'created_by_username']
-        read_only_fields = fields
+        read_only_fields = ['id', 'created_at', 'created_by_username', 'job_name']
 
 
 class JobOrderCreateSerializer(serializers.ModelSerializer):
     """
-    Serializer for Planning Engineer to create a JobOrder, Devices, and initial Tasks.
-    Handles nested creation logic in the create() method.
+    Serializer for Planning Engineer to create a JobOrder.
+    This serializer NO LONGER creates tasks.
     """
-    # Custom field to accept a list of device serials (Write Only)
-    device_serials = serializers.ListField(
-        child=serializers.CharField(max_length=100), 
-        write_only=True,
-        min_length=1,
-        help_text="List of unique serial numbers for devices in this job order."
-    )
-    # Field to pass standard time for tasks (Write Only)
-    standard_time_seconds = serializers.IntegerField(
-        validators=[MinValueValidator(1)],
-        write_only=True,
-        help_text="Standard time (in seconds) for the initial task of each device."
-    )
-    # Field for custom operation name (Write Only, optional)
-    operation_name = serializers.CharField(
-        max_length=200,
-        required=False,
-        allow_blank=True,
-        write_only=True,
-        help_text="Name of the operation/task for this job order. If not provided, defaults to 'Initial Assembly for [OrderCode]'."
-    )
     # Make description explicitly optional
     description = serializers.CharField(
         max_length=1000,
@@ -64,61 +105,120 @@ class JobOrderCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = JobOrder
-        fields = ['order_code', 'title', 'description', 'due_date', 'standard_time_seconds', 'device_serials', 'operation_name']
+        fields = ['job', 'order_code', 'title', 'description', 'due_date', 'total_devices']
+
+    def create(self, validated_data):
+        """
+        Create a JobOrder instance.
+        """
+        # Set the creator from the request context
+        validated_data['created_by'] = self.context['request'].user
+        
+        # The 'total_devices' field is now directly provided by the user
+        job_order = JobOrder.objects.create(**validated_data)
+        
+        return job_order
+
+
+class TaskCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating one or more tasks for a given Job Order.
+    """
+    # Accept a list of device serials to create tasks for
+    device_serials = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        write_only=True,
+        min_length=1,
+        help_text="List of unique serial numbers for devices to create tasks for."
+    )
+
+    class Meta:
+        model = Task
+        fields = [
+            'job_order', 
+            'operation_name', 
+            'standard_time_seconds', 
+            'task_type',
+            'device_serials'
+        ]
 
     def validate_device_serials(self, value):
-        """Check for unique serials within the input list and across the database."""
-        if len(value) != len(set(value)):
-            raise ValidationError("Device serial numbers must be unique within the request.")
-        
-        # Check for existence in the database (prevent duplicates)
-        existing_serials = Device.objects.filter(serial_number__in=value).values_list('serial_number', flat=True)
-        if existing_serials:
-            raise ValidationError(f"The following serial numbers already exist: {', '.join(existing_serials)}")
-        
+        """Check if all provided device serials exist."""
+        existing_devices = Device.objects.filter(serial_number__in=value)
+        if existing_devices.count() != len(value):
+            found_serials = existing_devices.values_list('serial_number', flat=True)
+            missing_serials = set(value) - set(found_serials)
+            raise ValidationError(f"The following device serials do not exist: {', '.join(missing_serials)}")
         return value
 
     def create(self, validated_data):
         """
-        Overrides create to handle nested JobOrder, Device, and Task creation.
+        Create multiple tasks for the specified devices under a job order.
         """
+        job_order = validated_data['job_order']
         device_serials = validated_data.pop('device_serials')
-        standard_time = validated_data.pop('standard_time_seconds')
-        # Get custom operation name, or use default
-        operation_name = validated_data.pop('operation_name', None)
-        if not operation_name or not operation_name.strip():
-            operation_name = f"Initial Assembly for {validated_data.get('order_code')}"
         
-        # Auto-calculated fields
-        validated_data['total_devices'] = len(device_serials)
-        validated_data['created_by'] = self.context['request'].user
-        
-        with transaction.atomic():
-            # 1. Create JobOrder
-            job_order = JobOrder.objects.create(**validated_data)
-            
-            devices_to_create = []
-            tasks_to_create = []
-            
-            # 2. Prepare Devices
-            for serial in device_serials:
-                device = Device(job_order=job_order, serial_number=serial)
-                devices_to_create.append(device)
-            created_devices = Device.objects.bulk_create(devices_to_create)
-            
-            # 3. Prepare initial Tasks (one task per device)
-            for device in created_devices:
-                task = Task(
-                    device=device,
-                    job_order=job_order,
-                    operation_name=operation_name,
-                    standard_time_seconds=standard_time,
-                    status='available',
-                )
-                tasks_to_create.append(task)
-            Task.objects.bulk_create(tasks_to_create)
+        tasks_to_create = []
+        devices = Device.objects.filter(serial_number__in=device_serials)
 
-        return job_order
+        for device in devices:
+            tasks_to_create.append(
+                Task(
+                    job_order=job_order,
+                    device=device,
+                    operation_name=validated_data['operation_name'],
+                    standard_time_seconds=validated_data['standard_time_seconds'],
+                    task_type=validated_data.get('task_type', 'technician'),
+                    status='available'
+                )
+            )
+        
+        # Bulk create tasks for efficiency
+        created_tasks = Task.objects.bulk_create(tasks_to_create)
+        
+        # Return the list of created tasks
+        return created_tasks
+
+
+class TaskSimpleCreateSerializer(serializers.ModelSerializer):
+    """
+    Simple serializer for creating individual tasks.
+    Used when adding tasks from job processes.
+    """
+    device_serial = serializers.CharField(max_length=100, write_only=True)
+    estimated_time = serializers.IntegerField(required=False, allow_null=True)
+    
+    class Meta:
+        model = Task
+        fields = [
+            'job_order',
+            'process',
+            'device_serial',
+            'operation_name',
+            'task_type',
+            'estimated_time'
+        ]
+    
+    def create(self, validated_data):
+        """Create a task and optionally create the device if it doesn't exist."""
+        device_serial = validated_data.pop('device_serial')
+        estimated_time = validated_data.pop('estimated_time', None)
+        
+        # Get or create the device
+        device, created = Device.objects.get_or_create(
+            serial_number=device_serial,
+            defaults={'job_order': validated_data['job_order']}
+        )
+        
+        # Create the task
+        task = Task.objects.create(
+            device=device,
+            standard_time_seconds=estimated_time or 0,
+            status='available',
+            **validated_data
+        )
+        
+        return task
 
 
 # -----------------------------------------------------------
@@ -128,19 +228,20 @@ class JobOrderCreateSerializer(serializers.ModelSerializer):
 class TaskSerializer(serializers.ModelSerializer):
     """
     Serializer for general task retrieval and display.
-    Includes calculated efficiency.
+    Includes calculated efficiency and task type.
     """
     job_order_code = serializers.CharField(source='job_order.order_code', read_only=True)
     device_serial = serializers.CharField(source='device.serial_number', read_only=True)
     technician_username = serializers.CharField(source='technician.username', read_only=True)
     efficiency = serializers.SerializerMethodField()
+    task_type_display = serializers.CharField(source='get_task_type_display', read_only=True)
 
     class Meta:
         model = Task
         fields = ['id', 'job_order_code', 'device_serial', 'technician_username', 
-                  'operation_name', 'standard_time_seconds', 'start_time', 
+                  'operation_name', 'task_type', 'task_type_display', 'standard_time_seconds', 'start_time', 
                   'end_time', 'actual_time_seconds', 'status', 'efficiency', 'created_at']
-        read_only_fields = fields
+        read_only_fields = ['id', 'job_order_code', 'device_serial', 'technician_username', 'efficiency', 'task_type_display', 'created_at']
 
     def get_efficiency(self, obj):
         """Calls the model method to calculate efficiency."""

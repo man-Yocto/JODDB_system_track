@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -8,6 +8,9 @@ import { QualityPage } from './pages/QualityPage';
 import { TestTechnicianPage } from './pages/TestTechnicianPage';
 import { PlannerPage } from './pages/PlannerPage';
 import { SupervisorPage } from './pages/SupervisorPage';
+import { TesterPage } from './pages/TesterPage';
+import { TaskPage } from './pages/TaskPage';
+import { JobTemplatesPage } from './pages/JobTemplatesPage';
 import "./App.css";
 import { SettingsPage } from './pages/SettingsPage';
 import { type UserRole } from './types';
@@ -24,71 +27,51 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { user } = useAuth();
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  if (!user) {
+    return <Navigate to="/" />;
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/" replace />;
-  }
-
-  // Check if user's role is allowed for this route
-  if (user && !allowedRoles.includes(user.role)) {
+  if (!allowedRoles.includes(user.role)) {
     console.warn(`User ${user.username} (role: ${user.role}) tried to access restricted page. Allowed roles: ${allowedRoles.join(', ')}`);
-    // Redirect to their home page based on their role
-    const roleRoutes: Record<UserRole, string> = {
-      technician: '/technician',
-      quality: '/quality',
-      supervisor: '/supervisor',
-      planner: '/planner',
-      test_technician: '/test-technician',
-    };
-    const homeRoute = roleRoutes[user.role];
-    return <Navigate to={homeRoute} replace />;
+    return <Navigate to="/unauthorized" />;
   }
 
   return <>{children}</>;
 };
 
 const App: React.FC = () => {
+  const { user, logout } = useAuth();
+
+  useEffect(() => {
+    const roleRoutes: Record<UserRole, string> = {
+      technician: '/dashboard',
+      supervisor: '/dashboard',
+      planning: '/planner',
+      quality: '/dashboard',
+      test_technician: '/dashboard',
+      tester: '/dashboard',
+    };
+
+    if (user) {
+      const intendedPath = roleRoutes[user.role];
+      if (window.location.pathname !== intendedPath) {
+        //
+      }
+    }
+  }, [user]);
+
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <div className="min-h-screen bg-gray-50 font-sans antialiased">
-          <Routes>
-              {/* Public Routes */}
+    <div className="app-container">
+      <Router>
+        <div className="flex h-screen bg-gray-100">
+          <main className="flex-1 flex flex-col overflow-hidden">
+            <Routes>
               <Route path="/" element={<LoginPage />} />
-              
-              {/* Role-Specific Routes with Permission Control */}
               <Route path="/dashboard" element={
-                  <ProtectedRoute allowedRoles={['supervisor', 'planner']}>
+                  <ProtectedRoute allowedRoles={['supervisor', 'planning']}>
                     <DashboardPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="/technician" element={
-                  <ProtectedRoute allowedRoles={['technician']}>
-                    <TechnicianPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="/quality" element={
-                  <ProtectedRoute allowedRoles={['quality']}>
-                    <QualityPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="/test-technician" element={
-                  <ProtectedRoute allowedRoles={['test_technician', 'technician']}>
-                    <TestTechnicianPage />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="/planner" element={
-                  <ProtectedRoute allowedRoles={['planner']}>
-                    <PlannerPage />
                   </ProtectedRoute>
                 } 
               />
@@ -98,18 +81,59 @@ const App: React.FC = () => {
                   </ProtectedRoute>
                 } 
               />
-              <Route path="/settings" element={
-                  <ProtectedRoute allowedRoles={['technician', 'quality', 'supervisor', 'planner', 'test_technician']}>
-                    <SettingsPage />
+              {/* Planner Routes */}
+              <Route path="/planner" element={
+                  <ProtectedRoute allowedRoles={['planning']}>
+                    <PlannerPage />
                   </ProtectedRoute>
-                }
+                } 
               />
-
-              {/* Catch-all redirect */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+              <Route path="/jobs" element={
+                  <ProtectedRoute allowedRoles={['planning']}>
+                    <JobTemplatesPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route path="/technician" element={
+                  <ProtectedRoute allowedRoles={['technician']}>
+                    <TechnicianPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route path="/tester" element={
+                  <ProtectedRoute allowedRoles={['tester']}>
+                    <TesterPage />
+                  </ProtectedRoute>
+                } 
+              />
+              {/* Fallback for any other authenticated user */}
+              <Route path="/unauthorized" element={
+                <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
+                  <h1 className="text-4xl font-bold text-red-600">Unauthorized</h1>
+                  <p className="text-lg text-gray-700 mt-2">You do not have permission to view this page.</p>
+                  <button
+                    onClick={() => {
+                      logout();
+                      window.location.href = '/';
+                    }}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Go to Login
+                  </button>
+                </div>
+              } />
+              <Route path="/tasks" element={
+                  <ProtectedRoute allowedRoles={['technician', 'quality', 'supervisor', 'planning', 'test_technician', 'tester']}>
+                    <TaskPage />
+                  </ProtectedRoute>
+                } 
+              />
+            </Routes>
+          </main>
         </div>
-      </BrowserRouter>
-    </AuthProvider>
+      </Router>
+    </div>
   );
-};export default App;
+};
+
+export default App;

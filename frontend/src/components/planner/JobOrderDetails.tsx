@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Edit, Archive, Calendar, Package, TrendingUp, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Edit, Archive, Calendar, Package, TrendingUp, AlertCircle, Plus } from 'lucide-react';
 import { api } from '../../services/api';
+import { AddTasksFromJobModal } from './AddTasksFromJobModal';
 
 interface JobOrderDetailsProps {
   jobId: string | null;
@@ -13,6 +14,7 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
   const [progress, setProgress] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAddTasksModal, setShowAddTasksModal] = useState(false);
 
   useEffect(() => {
     const fetchJobDetails = async () => {
@@ -39,6 +41,20 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
 
     fetchJobDetails();
   }, [jobId]);
+
+  const handleAddTasksSuccess = () => {
+    // Refresh job details after adding tasks
+    if (jobId) {
+      const jobIdNum = parseInt(jobId, 10);
+      Promise.all([
+        api.jobOrders.getJobOrder(jobIdNum),
+        api.metrics.getJobOrderProgress(jobIdNum),
+      ]).then(([jobData, progressData]) => {
+        setJob(jobData);
+        setProgress(progressData);
+      });
+    }
+  };
 
   if (loading) {
     return (
@@ -87,6 +103,15 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
           </div>
         </div>
         <div className="flex gap-2">
+          {job.job && (
+            <button 
+              onClick={() => setShowAddTasksModal(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Tasks from Template
+            </button>
+          )}
           <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center gap-2">
             <Edit className="w-4 h-4" />
             Edit
@@ -305,6 +330,17 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
           )}
         </div>
       </div>
+
+      {/* Add Tasks Modal */}
+      {job?.job && (
+        <AddTasksFromJobModal
+          isOpen={showAddTasksModal}
+          onClose={() => setShowAddTasksModal(false)}
+          jobOrderId={parseInt(jobId || '0', 10)}
+          jobId={job.job}
+          onSuccess={handleAddTasksSuccess}
+        />
+      )}
     </div>
   );
 };

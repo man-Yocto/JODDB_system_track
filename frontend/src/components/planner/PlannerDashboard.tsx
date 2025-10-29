@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Users, BarChart3, CheckCircle } from 'lucide-react';
+import { Plus, Users, BarChart3, CheckCircle, Package } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../Header';
@@ -211,6 +211,13 @@ export const PlannerDashboard: React.FC = () => {
             className={`pb-2 px-1 font-medium ${ currentView === 'dashboard' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800' }`}
           >
             Dashboard
+          </button>
+          <button
+            onClick={() => navigate('/jobs')}
+            className="pb-2 px-1 font-medium flex items-center gap-2 text-gray-600 hover:text-gray-800"
+          >
+            <Package className="w-4 h-4" />
+            Jobs
           </button>
           <button
             onClick={() => setCurrentView('task-review')}
