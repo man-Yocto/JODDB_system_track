@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
 from django.db import models # Import models for Q object
+from django.db.models import Q
 from core.serializers import JobOrderCreateSerializer, JobOrderSerializer, TaskSerializer , UserRegistrationSerializer , PrivilegedUserCreateSerializer , InspectionSerializer, SupervisorReviewSerializer
 from core.permissions import IsRoleRequired , IsPlanningEngineer, IsSupervisor # Import the custom permission
 from rest_framework import serializers
@@ -20,6 +21,7 @@ from django.db import transaction
 
 # Import our new calculation functions
 from core.metrics import calculations
+from core.metrics.serializers import TechnicianMetricsSerializer, JobOrderProgressSerializer
 
 import datetime
 import pandas as pd
@@ -85,8 +87,11 @@ class TechnicianTaskViewSet(
     def get_queryset(self):
         """
         Filter tasks to show:
-        1. Tasks with status 'available' (can be picked up).
-        2. Tasks currently 'in_progress' and assigned to the authenticated technician.
+        1. All 'available' tasks (for technician to start)
+        2. Tasks 'in_progress' assigned to the authenticated technician
+        3. Tasks 'pending-approval' assigned to the technician (completed, awaiting planner approval)
+        4. Tasks 'approved' assigned to the technician (planner approved)
+        5. For planners/admin: all tasks including pending-approval
         """
         user = self.request.user
         if not user.is_authenticated:
@@ -95,14 +100,17 @@ class TechnicianTaskViewSet(
         queryset = Task.objects.select_related('device', 'job_order', 'technician')
         
         if user.role in ['technician']:
-            # Technician sees available tasks AND their own in-progress tasks
+            # Technician sees:
+            # - Available tasks (anyone can start these)
+            # - Their own in-progress tasks
+            # - Their own pending-approval tasks (awaiting planner review)
+            # - Their own approved tasks (planner approved)
             return queryset.filter(
-                models.Q(status='available') | 
-                models.Q(technician=user, status='in_progress')
+                Q(status='available') | Q(technician=user, status__in=['in_progress', 'pending-approval', 'approved', 'done'])
             )
         
-        # Other roles (admin, supervisor, etc.) can see all non-final tasks
-        return queryset.filter(status__in=['available', 'in_progress', 'done', 'rejected'])
+        # Planners and other roles (admin, supervisor, etc.) can see all active tasks including pending-approval
+        return queryset.filter(status__in=['available', 'in_progress', 'pending-approval', 'approved', 'rejected', 'done'])
 
 
     @action(detail=True, methods=['patch'])
@@ -137,7 +145,7 @@ class TechnicianTaskViewSet(
     def end(self, request, pk=None):
         """
         Action for a Technician to end a task.
-        Calculates actual_time_seconds and efficiency, sets end_time and status = 'pending_qa'.
+        Calculates actual_time_seconds and efficiency, sets end_time and status = 'pending-approval'.
         """
         task = self.get_object()
         user = request.user
@@ -167,10 +175,8 @@ class TechnicianTaskViewSet(
         time_difference: datetime.timedelta = task.end_time - task.start_time
         task.actual_time_seconds = int(time_difference.total_seconds())
         
-        # 3. Set final status
-        # NOTE: Using 'done' which is the closest status in the provided model to 'pending_qa'.
-        # If 'pending_qa' were in the model's STATUS_CHOICES, it would be used here.
-        task.status = 'done' # The requirement asks for 'pending_qa', using 'done' from model
+        # 3. Set status to pending-approval (waiting for planner review)
+        task.status = 'pending-approval'
         
         # 4. Save all updates
         task.save(update_fields=['end_time', 'actual_time_seconds', 'status', 'updated_at'])
@@ -266,7 +272,12 @@ class UserManagementViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         """Only Admin and Planning Engineer can manage users."""
-        self.permission_classes = [IsAuthenticated, IsRoleRequired(['admin', 'planning'])]
+        if self.action in ['list', 'retrieve']:
+            # Allow supervisors and quality inspectors to list/view users for metrics and reporting
+            self.permission_classes = [IsAuthenticated, IsRoleRequired(['admin', 'planning', 'supervisor', 'quality'])]
+        else:
+            # Only admin and planning can create/update/delete users
+            self.permission_classes = [IsAuthenticated, IsRoleRequired(['admin', 'planning'])]
         return [permission() for permission in self.permission_classes]
     
 # -----------------------------------------------------------
@@ -303,11 +314,11 @@ class InspectionViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets
         and triggers a notification upon rejection.
         """
         decision = serializer.validated_data['decision']
-        task = serializer.validated_data['task_id']
+        task = serializer.validated_data.pop('task_id')  # Remove from validated_data and get the task object
         
         with transaction.atomic():
             # 1. Save the Inspection record
-            inspection = serializer.save(inspector=self.request.user, device=task.device)
+            inspection = serializer.save(inspector=self.request.user, device=task.device, task=task)
             
             # 2. Update Task status
             if decision == 'accepted':
@@ -389,8 +400,6 @@ class SupervisorReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, vi
             return supervisor_review
         
 
-from core.metrics.serializers import TechnicianMetricsSerializer
-
 class TechnicianMetricsView(APIView):
     """
     Provides daily performance metrics (Productivity, Efficiency, Utilization)
@@ -398,8 +407,13 @@ class TechnicianMetricsView(APIView):
     
     Access: Planning Engineer, Supervisor
     """
-    permission_classes = [IsAuthenticated, (IsPlanningEngineer | IsSupervisor)]
+    permission_classes = [IsAuthenticated]
     serializer_class = TechnicianMetricsSerializer
+
+    def get_permissions(self):
+        """Custom permissions - only planning engineers and supervisors can access"""
+        self.permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'supervisor', 'admin'])]
+        return [permission() for permission in self.permission_classes]
 
     def get(self, request, id, format=None):
         """
@@ -448,8 +462,6 @@ class TechnicianMetricsView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-from core.metrics.serializers import JobOrderProgressSerializer
-
 class JobOrderMetricsView(APIView):
     """
     Provides progress percentage, completion stats, and active alerts
@@ -457,8 +469,13 @@ class JobOrderMetricsView(APIView):
     
     Access: Planning Engineer, Supervisor
     """
-    permission_classes = [IsAuthenticated, (IsPlanningEngineer | IsSupervisor)]
+    permission_classes = [IsAuthenticated]
     serializer_class = JobOrderProgressSerializer
+
+    def get_permissions(self):
+        """Custom permissions - only planning engineers and supervisors can access"""
+        self.permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'supervisor', 'admin'])]
+        return [permission() for permission in self.permission_classes]
 
     def get(self, request, id, format=None):
         """

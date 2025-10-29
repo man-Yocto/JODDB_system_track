@@ -45,11 +45,7 @@ export const ReviewDrawer: React.FC<ReviewDrawerProps> = ({ isOpen, onClose, sub
                 <button
                   key={t}
                   onClick={() => setReviewType(t)}
-                  className={`px-4 py-2 rounded-lg border-2 font-medium transition ${
-                    reviewType === t
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
+                  className={`px-4 py-2 rounded-lg border-2 font-medium transition ${ reviewType === t ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 hover:border-gray-400' }`}
                 >
                   {t.charAt(0).toUpperCase() + t.slice(1)}
                 </button>

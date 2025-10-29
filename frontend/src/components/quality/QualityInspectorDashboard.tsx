@@ -193,9 +193,7 @@ export const QualityInspectorDashboard: React.FC = () => {
           <button
             onClick={() => setCurrentView('pending')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-              currentView === 'pending'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              currentView === 'pending' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             <ClipboardCheck className="w-5 h-5" />
@@ -210,9 +208,7 @@ export const QualityInspectorDashboard: React.FC = () => {
           <button
             onClick={() => setCurrentView('history')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-              currentView === 'history'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              currentView === 'history' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             <History className="w-5 h-5" />
@@ -223,9 +219,7 @@ export const QualityInspectorDashboard: React.FC = () => {
           <button
             onClick={() => setCurrentView('metrics')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-              currentView === 'metrics'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              currentView === 'metrics' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             <BarChart3 className="w-5 h-5" />

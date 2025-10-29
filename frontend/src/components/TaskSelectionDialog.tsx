@@ -221,7 +221,7 @@ export const TaskSelectionDialog: React.FC<TaskSelectionDialogProps> = ({
                     <tr
                       key={task.id}
                       onClick={() => toggleTask(task.id)}
-                      className={`cursor-pointer transition-colors ${
+                      className={`cursor-pointer ${
                         isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
                       }`}
                     >

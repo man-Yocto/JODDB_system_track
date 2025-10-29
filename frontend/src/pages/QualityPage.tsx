@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Header } from '../components/Header';
-import { QualityInspectorDashboard } from '../components/quality/QualityInspectorDashboard';
+import { QADashboard } from '../components/qa/QADashboard';
 
 /**
  * Quality Inspector Page - Inspection and quality control interface
@@ -31,9 +31,13 @@ export const QualityPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header onLogout={handleLogout} />
+      <Header 
+        title="Quality Inspector" 
+        subtitle="Inspection and quality control"
+        onLogout={handleLogout} 
+      />
       <main className="container mx-auto py-6 px-4">
-        <QualityInspectorDashboard />
+        <QADashboard />
       </main>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Users, BarChart3, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -11,7 +11,8 @@ import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { CreateJobOrderModal } from './CreateJobOrderModal';
 import { CreateUserModal } from './CreateUserModal';
 import { TaskReviewQueue } from './TaskReviewQueue';
-import { mockPlannerJobs, mockPlannerTasks } from '../../data/plannerMockData';
+import { api, type JobOrder, type Task } from '../../services/api';
+import { type PlannerTask, type PlannerJobOrder } from '../../types';
 
 type View = 'dashboard' | 'job-details' | 'users' | 'analytics' | 'task-review';
 
@@ -22,8 +23,32 @@ export const PlannerDashboard: React.FC = () => {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [showCreateJobModal, setShowCreateJobModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [tasks, setTasks] = useState(mockPlannerTasks);
+  const [jobOrders, setJobOrders] = useState<JobOrder[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [jobsData, tasksData] = await Promise.all([
+          api.jobOrders.getJobOrders(),
+          api.tasks.getTasks(),
+        ]);
+        setJobOrders(jobsData);
+        setTasks(tasksData);
+      } catch (err: any) {
+        console.error('Failed to fetch planner data:', err);
+        setError(err.message || 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -35,34 +60,91 @@ export const PlannerDashboard: React.FC = () => {
     setCurrentView('job-details');
   };
 
-  const handleApproveTask = (taskId: string, comments: string) => {
-    setTasks(prevTasks =>
-      prevTasks.map(task =>
-        task.id === taskId
-          ? { ...task, status: 'approved' as const }
-          : task
-      )
-    );
-    console.log(`Task ${taskId} approved with comments:`, comments);
+  const handleApproveTask = async (taskId: string, comments: string) => {
+    try {
+      const taskIdNum = parseInt(taskId, 10);
+      
+      // Create inspection with approved decision
+      await api.inspections.createInspection({
+        task_id: taskIdNum,
+        decision: 'accepted',
+        comments: comments || 'Approved by planner',
+      });
+      
+      console.log(`Task ${taskId} approved with comments:`, comments);
+      
+      // Refresh task list
+      const tasksData = await api.tasks.getTasks();
+      setTasks(tasksData);
+    } catch (err: any) {
+      console.error('Failed to approve task:', err);
+      setError(err.message || 'Failed to approve task');
+    }
   };
 
-  const handleRejectTask = (taskId: string, comments: string) => {
-    setTasks(prevTasks =>
-      prevTasks.map(task =>
-        task.id === taskId
-          ? { ...task, status: 'rejected' as const }
-          : task
-      )
-    );
-    console.log(`Task ${taskId} rejected with comments:`, comments);
+  const handleRejectTask = async (taskId: string, comments: string) => {
+    try {
+      const taskIdNum = parseInt(taskId, 10);
+      
+      // Create inspection with rejected decision
+      await api.inspections.createInspection({
+        task_id: taskIdNum,
+        decision: 'rejected',
+        comments: comments || 'Rejected by planner',
+      });
+      
+      console.log(`Task ${taskId} rejected with comments:`, comments);
+      
+      // Refresh task list
+      const tasksData = await api.tasks.getTasks();
+      setTasks(tasksData);
+    } catch (err: any) {
+      console.error('Failed to reject task:', err);
+      setError(err.message || 'Failed to reject task');
+    }
+  };
+
+  const handleJobOrderCreated = async () => {
+    // Refresh job orders list after new order is created
+    try {
+      const jobsData = await api.jobOrders.getJobOrders();
+      setJobOrders(jobsData);
+    } catch (err: any) {
+      console.error('Failed to refresh job orders:', err);
+    }
   };
 
   const renderView = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading dashboard...</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (error && currentView === 'dashboard') {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <p className="text-red-800 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
     switch (currentView) {
       case 'job-details':
         return <JobOrderDetails jobId={selectedJobId} onBack={() => setCurrentView('dashboard')} />;
       case 'users':
-        return <UserManagement onBack={() => setCurrentView('dashboard')} onCreateUser={() => setShowCreateUserModal(true)} />;
+        return <UserManagement onBack={() => setCurrentView('dashboard')} />;
       case 'analytics':
         return <AnalyticsDashboard onBack={() => setCurrentView('dashboard')} />;
       case 'task-review':
@@ -71,11 +153,11 @@ export const PlannerDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-gray-800">Task Review & Approval</h2>
               <div className="text-sm text-gray-600">
-                {tasks.filter(t => t.status === 'pending-approval').length} pending reviews
+                {tasks.filter(t => t.status === 'pending_supervisor').length} pending reviews
               </div>
             </div>
             <TaskReviewQueue
-              tasks={tasks}
+              tasks={tasks.filter(t => t.status === 'pending_supervisor') as unknown as PlannerTask[]}
               onApprove={handleApproveTask}
               onReject={handleRejectTask}
             />
@@ -103,13 +185,13 @@ export const PlannerDashboard: React.FC = () => {
               </button>
             </div>
 
-            <JobOrdersPanel jobs={mockPlannerJobs} onJobClick={handleJobClick} />
+            <JobOrdersPanel jobs={jobOrders as unknown as PlannerJobOrder[]} onJobClick={handleJobClick} loading={loading} />
           </div>
         );
     }
   };
 
-  const pendingTasksCount = tasks.filter(t => t.status === 'pending-approval').length;
+  const pendingTasksCount = tasks.filter(t => t.status === 'pending_supervisor').length;
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
@@ -126,21 +208,13 @@ export const PlannerDashboard: React.FC = () => {
         <nav className="flex gap-6">
           <button
             onClick={() => setCurrentView('dashboard')}
-            className={`pb-2 px-1 font-medium transition-colors ${
-              currentView === 'dashboard'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
+            className={`pb-2 px-1 font-medium ${ currentView === 'dashboard' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800' }`}
           >
             Dashboard
           </button>
           <button
             onClick={() => setCurrentView('task-review')}
-            className={`pb-2 px-1 font-medium transition-colors flex items-center gap-2 ${
-              currentView === 'task-review'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
+            className={`pb-2 px-1 font-medium flex items-center gap-2 ${ currentView === 'task-review' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800' }`}
           >
             <CheckCircle className="w-4 h-4" />
             Task Review
@@ -152,22 +226,14 @@ export const PlannerDashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setCurrentView('users')}
-            className={`pb-2 px-1 font-medium transition-colors flex items-center gap-2 ${
-              currentView === 'users'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
+            className={`pb-2 px-1 font-medium flex items-center gap-2 ${ currentView === 'users' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800' }`}
           >
             <Users className="w-4 h-4" />
             Personnel
           </button>
           <button
             onClick={() => setCurrentView('analytics')}
-            className={`pb-2 px-1 font-medium transition-colors flex items-center gap-2 ${
-              currentView === 'analytics'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
+            className={`pb-2 px-1 font-medium flex items-center gap-2 ${ currentView === 'analytics' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800' }`}
           >
             <BarChart3 className="w-4 h-4" />
             Analytics
@@ -185,6 +251,7 @@ export const PlannerDashboard: React.FC = () => {
         <CreateJobOrderModal
           isOpen={showCreateJobModal}
           onClose={() => setShowCreateJobModal(false)}
+          onSuccess={handleJobOrderCreated}
         />
       )}
       {showCreateUserModal && (

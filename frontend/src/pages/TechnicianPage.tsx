@@ -32,7 +32,11 @@ export const TechnicianPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Header onLogout={handleLogout} />
+      <Header 
+        title="Technician Dashboard" 
+        subtitle="Manage your tasks and operations"
+        onLogout={handleLogout} 
+      />
       <main className="h-[calc(100vh-65px)]">
         <TechnicianDashboard />
       </main>

@@ -120,15 +120,13 @@ export interface JobOrderProgress {
 }
 
 export interface TechnicianMetrics {
-  technician_id: number;
-  technician_name: string;
+  technician_id?: number;
+  technician_name?: string;
   date: string;
   productivity: number;
-  efficiency: number;
+  average_efficiency: number;
   utilization: number;
-  total_tasks_completed: number;
-  total_standard_time: number;
-  total_actual_time: number;
+  tasks_completed: number;
 }
 
 export interface Inspection {
@@ -139,6 +137,32 @@ export interface Inspection {
   decision: 'accepted' | 'rejected';
   comments: string;
   created_at: string;
+}
+
+export interface InspectionDetail extends Inspection {
+  task_details?: Task;
+  inspector_name?: string;
+  device_serial?: string;
+  job_order_code?: string;
+}
+
+export interface SupervisorReview {
+  id: number;
+  inspection: number;
+  supervisor: number | null;
+  decision: 'accepted' | 'rejected';
+  comments: string;
+  created_at: string;
+}
+
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active: boolean;
+  date_joined: string;
 }
 
 // Handle API responses (Axios version)
@@ -215,6 +239,15 @@ export const authAPI = {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
+  },
+
+  /**
+   * Get current user's profile
+   * GET /api/v1/auth/me/
+   */
+  getMe: async (): Promise<LoginResponse['user']> => {
+    const response = await axiosInstance.get('/api/v1/auth/me/');
+    return handleResponse<LoginResponse['user']>(response);
   },
 };
 
@@ -293,6 +326,7 @@ export const jobOrderAPI = {
     order_code: string;
     title: string;
     description?: string;
+    operation_name?: string;
     due_date: string;
     standard_time_seconds: number;
     device_serials: string[];
@@ -388,6 +422,34 @@ export const inspectionAPI = {
 };
 
 // =======================
+// Supervisor Review APIs (Supervisor)
+// =======================
+
+export const supervisorReviewAPI = {
+  /**
+   * Create supervisor review (accept/reject inspection)
+   * POST /api/v1/supervisor-reviews/
+   */
+  createReview: async (data: {
+    inspection_id: number;
+    decision: 'accepted' | 'rejected';
+    comments: string;
+  }): Promise<SupervisorReview> => {
+    const response = await axiosInstance.post('/api/v1/supervisor-reviews/', data);
+    return handleResponse<SupervisorReview>(response);
+  },
+
+  /**
+   * Get all supervisor reviews
+   * GET /api/v1/supervisor-reviews/
+   */
+  getReviews: async (): Promise<SupervisorReview[]> => {
+    const response = await axiosInstance.get('/api/v1/supervisor-reviews/');
+    return handlePaginatedResponse<SupervisorReview>(response);
+  },
+};
+
+// =======================
 // Export APIs
 // =======================
 
@@ -412,13 +474,67 @@ export const exportAPI = {
   },
 };
 
+// =======================
+// User Management APIs
+// =======================
+
+export const userAPI = {
+  /**
+   * Get all users
+   * GET /api/v1/users/
+   */
+  getUsers: async (): Promise<User[]> => {
+    const response = await axiosInstance.get('/api/v1/users/');
+    return handlePaginatedResponse<User>(response);
+  },
+
+  /**
+   * Create new user (Planner)
+   * POST /api/v1/users/
+   */
+  createUser: async (data: {
+    username: string;
+    email: string;
+    password: string;
+    full_name: string;
+    role: string;
+  }): Promise<User> => {
+    const response = await axiosInstance.post('/api/v1/users/', data);
+    return handleResponse<User>(response);
+  },
+
+  /**
+   * Update user information (Planner)
+   * PATCH /api/v1/users/{id}/
+   */
+  updateUser: async (userId: number, data: {
+    full_name?: string;
+    email?: string;
+    role?: string;
+    is_active?: boolean;
+  }): Promise<User> => {
+    const response = await axiosInstance.patch(`/api/v1/users/${userId}/`, data);
+    return handleResponse<User>(response);
+  },
+
+  /**
+   * Delete user (Planner)
+   * DELETE /api/v1/users/{id}/
+   */
+  deleteUser: async (userId: number): Promise<void> => {
+    await axiosInstance.delete(`/api/v1/users/${userId}/`);
+  },
+};
+
 // Export all APIs
 export const api = {
   auth: authAPI,
   tasks: taskAPI,
   jobOrders: jobOrderAPI,
+  users: userAPI,
   metrics: metricsAPI,
   inspections: inspectionAPI,
+  supervisorReviews: supervisorReviewAPI,
   export: exportAPI,
 };
 

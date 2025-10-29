@@ -25,7 +25,11 @@ export const JobsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Header onLogout={handleLogout} />
+      <Header 
+        title="Job Orders" 
+        subtitle="Manage and track job orders"
+        onLogout={handleLogout} 
+      />
       <main className="h-[calc(100vh-65px)]">
         <JobOrdersView jobOrders={jobOrders} onUpdateJob={handleUpdateJob} />
       </main>

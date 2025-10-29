@@ -1,14 +1,87 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Package, Clock } from 'lucide-react';
-import { type ReviewQueueItem } from '../../types';
+import { api } from '../../services/api';
 
 interface ReviewQueueProps {
-  items: ReviewQueueItem[];
-  onItemClick: (item: ReviewQueueItem) => void;
+  onItemClick: (item: any) => void;
 }
 
-export const ReviewQueue: React.FC<ReviewQueueProps> = ({ items, onItemClick }) => {
+interface ReviewItem {
+  id: string;
+  type: 'device' | 'report';
+  itemDescription: string;
+  jobTitle: string;
+  technicianName: string;
+  submittedAt: string;
+  priority: 'high' | 'medium' | 'low';
+  taskId: number;
+  jobId?: string;
+}
+
+export const ReviewQueue: React.FC<ReviewQueueProps> = ({ onItemClick }) => {
+  const [items, setItems] = useState<ReviewItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+
+  useEffect(() => {
+    fetchReviewQueue();
+  }, []);
+
+  const fetchReviewQueue = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch tasks that need supervisor review (completed tasks)
+      const tasks = await api.tasks.getTasks();
+      const [jobOrders, users] = await Promise.all([
+        api.jobOrders.getJobOrders(),
+        api.users.getUsers(),
+      ]);
+      
+      // Filter tasks that are completed and awaiting review
+      const tasksAwaitingReview = tasks.filter(
+        task => task.status === 'pending-approval' || task.status === 'done'
+      );
+      
+      // Create lookup maps
+      const jobOrderMap = new Map(jobOrders.map(jo => [jo.id, jo]));
+      const userMap = new Map(users.map(u => [u.id, u]));
+      
+      // Convert tasks to review items
+      const reviewItems: ReviewItem[] = tasksAwaitingReview
+        .filter(task => task.job_order) // Only include tasks with valid job_order
+        .map(task => {
+          const jobOrder = jobOrderMap.get(task.job_order);
+          const technician = task.technician ? userMap.get(task.technician) : null;
+          
+          // Determine priority based on efficiency and status
+          let priority: 'high' | 'medium' | 'low' = 'medium';
+          if (task.efficiency && task.efficiency < 70) {
+            priority = 'high';
+          } else if (task.efficiency && task.efficiency > 90) {
+            priority = 'low';
+          }
+          
+          return {
+            id: task.id.toString(),
+            type: 'device' as const,
+            itemDescription: task.operation_name || 'Task',
+            jobTitle: jobOrder?.title || jobOrder?.order_code || 'N/A',
+            technicianName: technician?.full_name || technician?.username || 'Unknown',
+            submittedAt: task.end_time || task.updated_at,
+            priority,
+            taskId: task.id,
+            jobId: task.job_order.toString(),
+          };
+        });
+      
+      setItems(reviewItems);
+    } catch (error) {
+      console.error('Error fetching review queue:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredItems = filter === 'all' 
     ? items 
@@ -21,6 +94,19 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ items, onItemClick }) 
       default: return 'border-blue-500 bg-blue-50';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Review Queue</h2>
+        </div>
+        <div className="p-8 text-center text-gray-500">
+          <div className="animate-pulse">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">

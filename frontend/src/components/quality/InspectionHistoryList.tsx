@@ -43,9 +43,7 @@ export const InspectionHistoryList: React.FC<InspectionHistoryListProps> = ({ in
               key={filter}
               onClick={() => setFilterDecision(filter as any)}
               className={`px-4 py-2 rounded-lg font-medium text-sm transition ${
-                filterDecision === filter
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                filterDecision === filter ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -67,11 +65,7 @@ export const InspectionHistoryList: React.FC<InspectionHistoryListProps> = ({ in
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
-                      inspection.decision === 'accepted'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${ inspection.decision === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }`}>
                       {inspection.decision === 'accepted' ? (
                         <CheckCircle className="w-3 h-3" />
                       ) : (

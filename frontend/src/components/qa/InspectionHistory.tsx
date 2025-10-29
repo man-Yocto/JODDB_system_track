@@ -49,9 +49,7 @@ export const InspectionHistory: React.FC<InspectionHistoryProps> = ({ inspection
               key={f}
               onClick={() => setFilter(f)}
               className={`px-4 py-2 rounded-lg font-medium transition ${
-                filter === f
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                filter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -85,9 +83,7 @@ export const InspectionHistory: React.FC<InspectionHistoryProps> = ({ inspection
                   <td className="px-4 py-3 text-sm text-gray-700">{inspection.technicianName}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">{inspection.operationName}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      inspection.decision === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${ inspection.decision === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }`}>
                       {inspection.decision}
                     </span>
                   </td>

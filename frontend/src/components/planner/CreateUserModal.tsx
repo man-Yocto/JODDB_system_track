@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
 import { type UserRole } from '../../types';
+import { api } from '../../services/api';
 
 interface CreateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onUserCreated?: () => void;
 }
 
-export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose }) => {
+export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUserCreated }) => {
   const [formData, setFormData] = useState({
     fullName: '',
     username: '',
@@ -15,17 +17,67 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
     password: '',
     role: 'user' as UserRole,
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
       ...prev,
       [e.target.id]: e.target.value
     }));
+    setError(null);
   };
 
-  const handleSubmit = () => {
-    console.log('Creating user:', formData);
-    onClose();
+  const handleSubmit = async () => {
+    setError(null);
+    setLoading(true);
+    
+    // Validation
+    if (!formData.fullName.trim() || !formData.username.trim() || !formData.email.trim() || !formData.password.trim()) {
+      setError('All fields are required');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Map role to backend value
+      const roleMap: { [key in UserRole]: string } = {
+        'technician': 'technician',
+        'supervisor': 'supervisor',
+        'planner': 'planner',
+        'quality': 'quality',
+        'test_technician': 'test_technician',
+      };
+
+      await api.users.createUser({
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        full_name: formData.fullName,
+        role: roleMap[formData.role] || 'technician',
+      });
+
+      console.log('User created successfully');
+      
+      // Reset form
+      setFormData({
+        fullName: '',
+        username: '',
+        email: '',
+        password: '',
+        role: 'user' as UserRole,
+      });
+      
+      if (onUserCreated) {
+        onUserCreated();
+      }
+      onClose();
+    } catch (err: any) {
+      console.error('Failed to create user:', err);
+      setError(err.message || 'Failed to create user');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -45,6 +97,11 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
           </div>
 
           <div className="p-6">
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
@@ -113,16 +170,18 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
           <div className="px-6 py-4 border-t border-gray-200 flex gap-3 justify-end">
             <button
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+              disabled={loading}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
+              disabled={loading}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2 disabled:opacity-50"
             >
               <UserPlus className="w-4 h-4" />
-              Create User
+              {loading ? 'Creating...' : 'Create User'}
             </button>
           </div>
         </div>

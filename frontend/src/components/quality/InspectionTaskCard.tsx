@@ -124,11 +124,7 @@ export const InspectionTaskCard: React.FC<InspectionTaskCardProps> = ({ task, on
             <div className="mb-6 p-4 bg-gray-50 rounded-lg">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-gray-700">Task Efficiency:</span>
-                <span className={`text-lg font-bold ${
-                  task.efficiency >= 90 ? 'text-green-600' :
-                  task.efficiency >= 75 ? 'text-yellow-600' :
-                  'text-red-600'
-                }`}>
+                <span className={`text-lg font-bold ${ task.efficiency >= 90 ? 'text-green-600' : task.efficiency >= 75 ? 'text-yellow-600' : 'text-red-600' }`}>
                   {task.efficiency.toFixed(1)}%
                 </span>
               </div>
@@ -171,12 +167,8 @@ export const InspectionTaskCard: React.FC<InspectionTaskCardProps> = ({ task, on
       {showDecisionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-md w-full">
-            <div className={`px-6 py-4 border-b ${
-              decision === 'accepted' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-            }`}>
-              <h3 className={`text-xl font-bold flex items-center gap-2 ${
-                decision === 'accepted' ? 'text-green-800' : 'text-red-800'
-              }`}>
+            <div className={`px-6 py-4 border-b ${ decision === 'accepted' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200' }`}>
+              <h3 className={`text-xl font-bold flex items-center gap-2 ${ decision === 'accepted' ? 'text-green-800' : 'text-red-800' }`}>
                 {decision === 'accepted' ? <CheckCircle className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
                 {decision === 'accepted' ? 'Accept Task' : 'Reject Task'}
               </h3>
@@ -224,11 +216,7 @@ export const InspectionTaskCard: React.FC<InspectionTaskCardProps> = ({ task, on
                 <button
                   onClick={handleSubmitInspection}
                   disabled={isSubmitting}
-                  className={`px-6 py-2 text-white rounded-lg transition disabled:opacity-50 flex items-center gap-2 ${
-                    decision === 'accepted'
-                      ? 'bg-green-600 hover:bg-green-700'
-                      : 'bg-red-600 hover:bg-red-700'
-                  }`}
+                  className={`px-6 py-2 text-white rounded-lg transition disabled:opacity-50 flex items-center gap-2 ${ decision === 'accepted' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700' }`}
                 >
                   {isSubmitting ? (
                     <>

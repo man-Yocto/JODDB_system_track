@@ -38,34 +38,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
   }, []);
 
-  // Map backend roles to frontend roles
-  const mapBackendRoleToFrontend = (backendRole: string): UserRole => {
-    const roleMapping: Record<string, UserRole> = {
-      'technician': 'technician',
-      'supervisor': 'supervisor',
-      'planning': 'planner',
-      'quality': 'quality',
-      'admin': 'planner', // Admin treated as planner in UI
-    };
-    return roleMapping[backendRole] || 'technician';
-  };
-
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
+      // Clear any existing session first
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
+      setUser(null);
+      
       const response = await api.auth.login(username, password);
       
-      console.log('Login response:', response); // Debug log
+      console.log('Login response:', response);
       
-      // Store tokens and user data
       if (response.access && response.refresh && response.user) {
         localStorage.setItem('access_token', response.access);
         localStorage.setItem('refresh_token', response.refresh);
         
         // Map backend user format to frontend User type
-        const mappedUser: any = {
+        const mappedUser: User = {
           id: String(response.user.id),
           name: response.user.full_name || response.user.username,
-          email: response.user.email || response.user.username,
+          email: response.user.email,
           username: response.user.username,
           role: response.user.role as UserRole
         };
@@ -73,7 +66,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.setItem('user', JSON.stringify(mappedUser));
         setUser(mappedUser);
         
-        console.log('Login successful, user set:', mappedUser); // Debug log
+        console.log('Login successful, user set:', mappedUser);
         return true;
       } else {
         console.error('Invalid login response format:', response);
@@ -81,6 +74,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     } catch (err: any) {
       console.error('Login error:', err);
+      // Ensure state is cleared on login error
+      setUser(null);
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
       return false;
     }
   };
@@ -91,10 +89,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       // Call backend logout to blacklist token
       await api.auth.logout();
+      console.log('Logout successful');
     } catch (err) {
-      console.error('Logout error:', err);
+      console.error('Logout error (continuing with local logout):', err);
     } finally {
-      // Clear user state
+      // Always clear user state and tokens, even if backend logout fails
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
       localStorage.removeItem('user');

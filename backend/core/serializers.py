@@ -46,10 +46,25 @@ class JobOrderCreateSerializer(serializers.ModelSerializer):
         write_only=True,
         help_text="Standard time (in seconds) for the initial task of each device."
     )
+    # Field for custom operation name (Write Only, optional)
+    operation_name = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        write_only=True,
+        help_text="Name of the operation/task for this job order. If not provided, defaults to 'Initial Assembly for [OrderCode]'."
+    )
+    # Make description explicitly optional
+    description = serializers.CharField(
+        max_length=1000,
+        required=False,
+        allow_blank=True,
+        help_text="Detailed description of the job order (optional)"
+    )
 
     class Meta:
         model = JobOrder
-        fields = ['order_code', 'title', 'due_date', 'standard_time_seconds', 'device_serials']
+        fields = ['order_code', 'title', 'description', 'due_date', 'standard_time_seconds', 'device_serials', 'operation_name']
 
     def validate_device_serials(self, value):
         """Check for unique serials within the input list and across the database."""
@@ -69,6 +84,10 @@ class JobOrderCreateSerializer(serializers.ModelSerializer):
         """
         device_serials = validated_data.pop('device_serials')
         standard_time = validated_data.pop('standard_time_seconds')
+        # Get custom operation name, or use default
+        operation_name = validated_data.pop('operation_name', None)
+        if not operation_name or not operation_name.strip():
+            operation_name = f"Initial Assembly for {validated_data.get('order_code')}"
         
         # Auto-calculated fields
         validated_data['total_devices'] = len(device_serials)
@@ -88,8 +107,6 @@ class JobOrderCreateSerializer(serializers.ModelSerializer):
             created_devices = Device.objects.bulk_create(devices_to_create)
             
             # 3. Prepare initial Tasks (one task per device)
-            operation_name = f"Initial Assembly for {job_order.order_code}"
-            
             for device in created_devices:
                 task = Task(
                     device=device,

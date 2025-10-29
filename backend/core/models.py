@@ -130,8 +130,10 @@ class Task(models.Model):
     STATUS_CHOICES = [
         ('available', 'Available'),
         ('in_progress', 'In Progress'),
-        ('done', 'Done'),
-        ('rejected', 'Rejected'),
+        ('pending-approval', 'Pending Approval'),  # ← Technician finished, waiting for planner approval
+        ('approved', 'Approved'),  # ← Planner approved
+        ('rejected', 'Rejected'),  # ← Planner rejected
+        ('done', 'Done'),  # ← Final completed status
     ]
     
     device = models.ForeignKey(

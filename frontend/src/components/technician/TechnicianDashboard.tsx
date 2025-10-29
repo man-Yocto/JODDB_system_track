@@ -4,19 +4,16 @@ import { TechnicianTaskCard } from './TechnicianTaskCard';
 import { QuickActionsBar } from './QuickActionsBar';
 import { TaskTimer } from './TaskTimer';
 import { TaskQueuePreview } from './TaskQueuePreview';
-import { TechnicianMetricsCard } from './TechnicianMetricsCard';
 import { DailyReportModal } from './DailyReportModal';
 import { RefreshCw, AlertCircle, ListChecks, CheckSquare, Square, FileText } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const TechnicianDashboard: React.FC = () => {
-  const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'available' | 'in_progress' | 'done'>('all');
-  const [showMetrics, setShowMetrics] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'available' | 'in_progress' | 'pending-approval'>('all');
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const [isSelectAllMode, setIsSelectAllMode] = useState(false);
   const [showDailyReport, setShowDailyReport] = useState(false);
@@ -24,7 +21,7 @@ export const TechnicianDashboard: React.FC = () => {
 
   const activeTask = tasks.find(t => t.status === 'in_progress');
   const upcomingTasks = tasks.filter(t => t.status === 'available');
-  const completedTasks = tasks.filter(t => t.status === 'done' || t.status === 'completed');
+  const completedTasks = tasks.filter(t => t.status === 'pending-approval' || t.status === 'approved' || t.status === 'done');
 
   const fetchTasks = useCallback(async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -154,12 +151,6 @@ export const TechnicianDashboard: React.FC = () => {
               <RefreshCw className={`w-5 h-5 text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
-              onClick={() => setShowMetrics(!showMetrics)}
-              className={`p-2 rounded-lg transition ${showMetrics ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-            >
-              <ListChecks className="w-5 h-5" />
-            </button>
-            <button
               onClick={() => setShowDailyReport(true)}
               className="p-2 bg-orange-100 text-orange-600 rounded-lg hover:bg-orange-200"
             >
@@ -173,14 +164,12 @@ export const TechnicianDashboard: React.FC = () => {
             { value: 'all', label: 'All', count: tasks.length },
             { value: 'available', label: 'Available', count: upcomingTasks.length },
             { value: 'in_progress', label: 'In Progress', count: activeTask ? 1 : 0 },
-            { value: 'done', label: 'Completed', count: completedTasks.length },
+            { value: 'pending-approval', label: 'Completed', count: completedTasks.length },
           ].map(({ value, label, count }) => (
             <button
               key={value}
               onClick={() => setFilter(value as any)}
-              className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap ${
-                filter === value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
+              className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap ${ filter === value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600' }`}
             >
               {label} ({count})
             </button>
@@ -211,14 +200,8 @@ export const TechnicianDashboard: React.FC = () => {
       </div>
 
       {activeTask && (
-        <div className="sticky top-[240px] z-10 px-4 pt-4">
+        <div className="sticky top-[172px] z-10 px-4 pt-4">
           <TaskTimer task={activeTask} />
-        </div>
-      )}
-
-      {showMetrics && user && (
-        <div className="px-4 pt-4">
-          <TechnicianMetricsCard technicianId={parseInt(user.id)} />
         </div>
       )}
 

@@ -24,11 +24,9 @@ export const DashboardPage: React.FC = () => {
       case 'technician':
         navigate('/technician', { replace: true });
         break;
-      case 'quality_inspector':
       case 'quality':
         navigate('/quality', { replace: true });
         break;
-      case 'planning':
       case 'planner':
         navigate('/planner', { replace: true });
         break;
@@ -78,7 +76,11 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Header onLogout={handleLogout} />
+      <Header 
+        title="Dashboard" 
+        subtitle="Welcome back"
+        onLogout={handleLogout} 
+      />
       {renderDashboardContent()}
     </div>
   );

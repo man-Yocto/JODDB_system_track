@@ -1,68 +1,85 @@
-import React, { useState } from 'react';
-import { Search, Filter, ClipboardCheck, BarChart3 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ClipboardCheck, BarChart3 } from 'lucide-react';
 import { QAKPIs } from './QAKPIs';
 import { TaskInspectionPanel } from './TaskInspectionPanel';
 import { InspectionHistory } from './InspectionHistory';
 import { QAAnalytics } from './QAAnalytics';
-import { mockQATasks, mockQAInspections, mockQAMetrics } from '../../data/qaMockData';
+import { api } from '../../services/api';
 
 type View = 'dashboard' | 'inspections' | 'history' | 'analytics';
 
 export const QADashboard: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [tasks, setTasks] = useState(mockQATasks);
-  const [inspections, setInspections] = useState(mockQAInspections);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [inspections, setInspections] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleInspect = (taskId: string, decision: 'accepted' | 'rejected', comments: string) => {
-    // Update task status
-    setTasks(prevTasks =>
-      prevTasks.map(task =>
-        task.id === taskId
-          ? { ...task, status: decision === 'accepted' ? 'accepted_by_qa' as const : 'rework_required' as const }
-          : task
-      )
-    );
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-    // Add inspection record
-    const task = tasks.find(t => t.id === taskId);
-    if (task) {
-      const newInspection: any = {
-        id: `INS${Date.now()}`,
-        taskId,
-        deviceSerial: task.deviceSerial,
-        jobOrderCode: task.jobOrderCode,
-        technicianName: task.technicianName,
-        operationName: task.operationName,
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [allTasks, allInspections] = await Promise.all([
+        api.tasks.getTasks(),
+        api.inspections.getInspections(),
+      ]);
+      
+      setTasks(allTasks);
+      setInspections(allInspections);
+    } catch (error) {
+      console.error('Error fetching QA data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInspect = async (taskId: string, decision: 'accepted' | 'rejected', comments: string) => {
+    try {
+      // Create inspection via API
+      await api.inspections.createInspection({
+        task_id: parseInt(taskId),
         decision,
         comments,
-        inspectorId: 'QI001',
-        inspectorName: 'Fatima Quality',
-        inspectedAt: new Date().toISOString()
-      };
-      setInspections(prev => [newInspection, ...prev]);
-    }
+      });
 
-    console.log(`Task ${taskId} ${decision} with comments:`, comments);
+      // Refresh data after inspection
+      await fetchData();
+      
+      // Show success message
+      console.log(`✓ Task ${taskId} ${decision}${comments ? ` - ${comments}` : ''}`);
+    } catch (error: any) {
+      console.error('Error creating inspection:', error);
+      throw new Error(error.response?.data?.message || 'Failed to submit inspection');
+    }
   };
 
   const renderView = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-pulse text-gray-600">Loading QA data...</div>
+        </div>
+      );
+    }
+
     switch (currentView) {
       case 'inspections':
         return (
           <TaskInspectionPanel
-            tasks={tasks.filter(t => t.status === 'pending_qa' || t.status === 'done')}
+            tasks={tasks}
             onInspect={handleInspect}
           />
         );
       case 'history':
         return <InspectionHistory inspections={inspections} />;
       case 'analytics':
-        return <QAAnalytics inspections={inspections} tasks={tasks} />;
+        return <QAAnalytics tasks={tasks} />;
       default:
         return (
           <div className="space-y-6">
-            <QAKPIs metrics={mockQAMetrics} />
+            <QAKPIs tasks={tasks} inspections={inspections} />
             
             <div className="flex gap-4">
               <button
@@ -80,19 +97,25 @@ export const QADashboard: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-800">Recent Inspections</h3>
               </div>
               <div className="p-4">
-                {inspections.slice(0, 5).map(inspection => (
-                  <div key={inspection.id} className="py-3 border-b last:border-0 flex justify-between items-center">
-                    <div>
-                      <div className="font-medium text-gray-800">{inspection.deviceSerial} - {inspection.operationName}</div>
-                      <div className="text-sm text-gray-600">{inspection.technicianName} • {inspection.inspectedAt}</div>
+                {inspections.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8">No inspections yet</div>
+                ) : (
+                  inspections.slice(0, 5).map((inspection: any) => (
+                    <div key={inspection.id} className="py-3 border-b last:border-0 flex justify-between items-center">
+                      <div>
+                        <div className="font-medium text-gray-800">Task #{inspection.task}</div>
+                        <div className="text-sm text-gray-600">
+                          {new Date(inspection.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        inspection.decision === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {inspection.decision}
+                      </span>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      inspection.decision === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {inspection.decision}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -100,7 +123,9 @@ export const QADashboard: React.FC = () => {
     }
   };
 
-  const pendingCount = tasks.filter(t => t.status === 'pending_qa' || t.status === 'done').length;
+  const pendingCount = tasks.filter((t: any) => 
+    t.status === 'pending_qa' || t.status === 'done' || t.status === 'pending_supervisor'
+  ).length;
 
   return (
     <div className="h-full flex flex-col bg-gray-50">

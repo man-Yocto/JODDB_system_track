@@ -76,9 +76,7 @@ export const TaskReviewQueue: React.FC<TaskReviewQueueProps> = ({ tasks, onAppro
               key={f}
               onClick={() => setFilter(f)}
               className={`px-4 py-2 rounded-lg font-medium transition ${
-                filter === f
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                filter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               {f.charAt(0).toUpperCase() + f.slice(1)}

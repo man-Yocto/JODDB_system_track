@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
-import { ArrowLeft, MessageSquare, Download } from 'lucide-react';
-import { mockSupervisorJobs, mockDeviceLogs, mockSubmissions } from '../../data/supervisorMockData';
-import { ReviewDrawer } from './ReviewDrawer';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Download, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { api, type JobOrder, type Task, type JobOrderProgress, type Inspection } from '../../services/api';
+
+interface EnrichedTask extends Task {
+  technician_username?: string;
+  qa_inspection?: Inspection;
+  qa_status?: 'approved' | 'rejected' | 'pending' | 'not_inspected';
+}
 
 interface JobOrderDetailsProps {
   jobId: string | null;
@@ -9,215 +14,264 @@ interface JobOrderDetailsProps {
 }
 
 export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack }) => {
-  const [activeTab, setActiveTab] = useState<'devices' | 'submissions'>('devices');
-  const [showReviewDrawer, setShowReviewDrawer] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<{ id: string; type: 'task' | 'device' } | null>(null);
-  
-  const job = mockSupervisorJobs.find(j => j.id === jobId);
-  const deviceLogs = mockDeviceLogs.filter(d => d.jobId === jobId);
-  const submissions = mockSubmissions.filter(s => s.jobId === jobId);
+  const [loading, setLoading] = useState(true);
+  const [jobOrder, setJobOrder] = useState<JobOrder | null>(null);
+  const [tasks, setTasks] = useState<EnrichedTask[]>([]);
+  const [progress, setProgress] = useState<JobOrderProgress | null>(null);
+  const [users, setUsers] = useState<any[]>([]);
 
-  if (!job) return null;
+  useEffect(() => {
+    if (jobId) {
+      fetchJobOrderDetails();
+    }
+  }, [jobId]);
 
-  const handleWriteReview = (itemId: string, type: 'task' | 'device') => {
-    setSelectedItem({ id: itemId, type });
-    setShowReviewDrawer(true);
+  const fetchJobOrderDetails = async () => {
+    try {
+      setLoading(true);
+      const [job, allTasks, allUsers, progressData, inspections] = await Promise.all([
+        api.jobOrders.getJobOrder(parseInt(jobId!)),
+        api.tasks.getTasks(),
+        api.users.getUsers(),
+        api.metrics.getJobOrderProgress(parseInt(jobId!)).catch(err => {
+          console.warn('Could not fetch progress:', err);
+          return null;
+        }),
+        api.inspections.getInspections(),
+      ]);
+      
+      setJobOrder(job);
+      setProgress(progressData);
+      setUsers(allUsers);
+      
+      // Filter tasks for this job order
+      const jobTasks = allTasks.filter((t: Task) => t.job_order === parseInt(jobId!));
+      
+      // Create inspection map by task ID
+      const inspectionMap = new Map(inspections.map(insp => [insp.task, insp]));
+      
+      // Enrich tasks with technician names and QA inspection status
+      const enrichedTasks: EnrichedTask[] = jobTasks.map(task => {
+        const tech = allUsers.find(u => u.id === task.technician);
+        const inspection = inspectionMap.get(task.id);
+        
+        // Determine QA status
+        let qa_status: 'approved' | 'rejected' | 'pending' | 'not_inspected' = 'not_inspected';
+        if (inspection) {
+          qa_status = inspection.decision === 'accepted' ? 'approved' : 'rejected';
+        } else if (task.status === 'done' || task.status === 'pending_qa') {
+          qa_status = 'pending';
+        }
+        
+        return {
+          ...task,
+          technician_username: tech ? (tech.full_name || tech.username) : 'Unassigned',
+          qa_inspection: inspection,
+          qa_status,
+        };
+      });
+      
+      setTasks(enrichedTasks);
+    } catch (error) {
+      console.error('Error fetching job order details:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (!jobId) return null;
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg transition">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1">
+            <div className="animate-pulse text-gray-600">Loading...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!jobOrder) return null;
+
+  // Use progress data from backend API
+  const totalDevices = progress?.total_devices || jobOrder.total_devices || 0;
+  const completedDevices = progress?.total_completed || 0;
+  const rejectedDevices = progress?.total_rejected || 0;
+  const percentComplete = progress?.progress_percent || 0;
+  const alerts = progress?.alerts || [];
+  
+  // Calculate task statistics
+  const completedTasks = tasks.filter((t: Task) => t.status === 'done' || t.status === 'completed').length;
+  const inProgressTasks = tasks.filter((t: Task) => t.status === 'in_progress').length;
+  const totalTasks = tasks.length;
+  
+  // Get unique technicians assigned to this job
+  const assignedTechnicians = [...new Set(tasks.map(t => t.technician).filter(Boolean))];
+  const technicianNames = assignedTechnicians.map(techId => {
+    const user = users.find(u => u.id === techId);
+    return user ? (user.full_name || user.username) : `Tech ${techId}`;
+  });
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
-        <button
-          onClick={onBack}
-          className="p-2 hover:bg-gray-100 rounded-lg transition"
-        >
+        <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg transition">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-800">{job.title}</h1>
-          <p className="text-sm text-gray-600">{job.id} • Due: {job.dueDate}</p>
+          <h1 className="text-2xl font-bold text-gray-800">{jobOrder.title}</h1>
+          <p className="text-sm text-gray-600">
+            {jobOrder.order_code} • Due: {new Date(jobOrder.due_date).toLocaleDateString()}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
-            <Download className="w-4 h-4 inline mr-2" />
-            Export
-          </button>
-        </div>
+        <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+          <Download className="w-4 h-4 inline mr-2" />
+          Export
+        </button>
       </div>
 
-      {/* Progress Overview */}
+      {/* Alerts Section */}
+      {alerts.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-900 mb-2">Active Alerts</h3>
+              <ul className="space-y-1">
+                {alerts.map((alert, idx) => (
+                  <li key={idx} className="text-sm text-red-800">
+                    • {alert.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-sm text-gray-600">Completion</div>
-          <div className="text-2xl font-bold text-gray-800">{job.percentComplete}%</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <div className="text-sm text-gray-600">Assigned</div>
-          <div className="text-2xl font-bold text-gray-800">{job.assignedTechnicians.length}</div>
+          <div className="text-2xl font-bold text-gray-800">{Math.round(percentComplete)}%</div>
+          <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full transition-all"
+              style={{ width: `${percentComplete}%` }}
+            />
+          </div>
         </div>
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-sm text-gray-600">Devices</div>
-          <div className="text-2xl font-bold text-gray-800">{deviceLogs.length}</div>
+          <div className="text-2xl font-bold text-gray-800">{completedDevices}/{totalDevices}</div>
+          <div className="text-xs text-gray-500 mt-1">
+            {rejectedDevices > 0 && `${rejectedDevices} rejected`}
+          </div>
         </div>
         <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <div className="text-sm text-gray-600">Status</div>
-          <div className="text-lg font-semibold text-blue-600">{job.status}</div>
+          <div className="text-sm text-gray-600">Tasks</div>
+          <div className="text-2xl font-bold text-gray-800">{completedTasks}/{totalTasks}</div>
+          <div className="text-xs text-gray-500 mt-1">
+            {inProgressTasks} in progress
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
+          <div className="text-sm text-gray-600">Technicians</div>
+          <div className="text-lg font-medium text-gray-800">{assignedTechnicians.length}</div>
+          <div className="text-xs text-gray-500 mt-1 truncate" title={technicianNames.join(', ')}>
+            {technicianNames.slice(0, 2).join(', ')}
+            {technicianNames.length > 2 && ` +${technicianNames.length - 2}`}
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="bg-white rounded-lg border border-gray-200">
-        <div className="border-b border-gray-200 px-6">
-          <div className="flex gap-8">
-            <button
-              onClick={() => setActiveTab('devices')}
-              className={`py-4 font-medium transition ${
-                activeTab === 'devices'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Device Tracker
-            </button>
-            <button
-              onClick={() => setActiveTab('submissions')}
-              className={`py-4 font-medium transition ${
-                activeTab === 'submissions'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              Task Submissions
-            </button>
-          </div>
+        <div className="border-b border-gray-200 px-6 py-4">
+          <h2 className="text-lg font-semibold text-gray-800">Tasks</h2>
         </div>
-
         <div className="p-6">
-          {activeTab === 'devices' ? (
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Serial ID</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Technician</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Timestamp</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Supervisor Review</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">QA Status</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {deviceLogs.map((log, idx) => (
-                  <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-sm">{log.serialId}</td>
-                    <td className="px-4 py-3 text-sm">{log.technicianName}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        log.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        log.status === 'in-progress' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {log.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{log.timestamp}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        log.supervisorReview ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {log.supervisorReview ? 'Reviewed' : 'Not Reviewed'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        log.qaStatus === 'approved' ? 'bg-green-100 text-green-800' :
-                        log.qaStatus === 'rejected' ? 'bg-red-100 text-red-800' :
-                        log.qaStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {log.qaStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleWriteReview(log.serialId, 'device')}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1 ml-auto"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                        {log.supervisorReview ? 'Edit Review' : 'Write Review'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {tasks.length === 0 ? (
+            <div className="text-center text-gray-500 py-8">No tasks found</div>
           ) : (
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Device</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Operation</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Technician</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Devices</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Time</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Supervisor Review</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Efficiency</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Task Status</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">QA Status</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {submissions.map(sub => (
-                  <tr key={sub.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm">{sub.date}</td>
-                    <td className="px-4 py-3 text-sm">{sub.technicianName}</td>
-                    <td className="px-4 py-3 text-sm">{sub.devicesCompleted}</td>
-                    <td className="px-4 py-3 text-sm">{sub.timeSpent}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        sub.supervisorReview ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {sub.supervisorReview ? 'Reviewed' : 'Not Reviewed'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        sub.qaStatus === 'approved' ? 'bg-green-100 text-green-800' :
-                        sub.qaStatus === 'rejected' ? 'bg-red-100 text-red-800' :
-                        sub.qaStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {sub.qaStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleWriteReview(sub.id, 'task')}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1 ml-auto"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                        {sub.supervisorReview ? 'Edit Review' : 'Write Review'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {tasks.map((task: EnrichedTask) => {
+                  const efficiency = task.efficiency || 0;
+                  return (
+                    <tr key={task.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm">{task.device_serial || `#${task.device}`}</td>
+                      <td className="px-4 py-3 text-sm">{task.operation_name || 'N/A'}</td>
+                      <td className="px-4 py-3 text-sm">{task.technician_username}</td>
+                      <td className="px-4 py-3 text-center text-sm">
+                        {efficiency > 0 ? (
+                          <span className={`font-medium ${
+                            efficiency >= 100 ? 'text-green-600' :
+                            efficiency >= 80 ? 'text-blue-600' :
+                            efficiency >= 60 ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {Math.round(efficiency)}%
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          task.status === 'done' || task.status === 'completed' ? 'bg-green-100 text-green-800' : 
+                          task.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                          task.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                          task.status === 'pending_qa' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {task.status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {task.qa_status === 'approved' && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <CheckCircle className="w-3 h-3" />
+                            Approved
+                          </span>
+                        )}
+                        {task.qa_status === 'rejected' && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <XCircle className="w-3 h-3" />
+                            Rejected
+                          </span>
+                        )}
+                        {task.qa_status === 'pending' && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                            <Clock className="w-3 h-3" />
+                            Pending QA
+                          </span>
+                        )}
+                        {task.qa_status === 'not_inspected' && (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
       </div>
-
-      {/* Review Drawer */}
-      {showReviewDrawer && selectedItem && (
-        <ReviewDrawer
-          isOpen={showReviewDrawer}
-          onClose={() => {
-            setShowReviewDrawer(false);
-            setSelectedItem(null);
-          }}
-          submissionId={selectedItem.id}
-          type={selectedItem.type}
-        />
-      )}
     </div>
   );
 };

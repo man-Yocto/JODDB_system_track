@@ -130,7 +130,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-gray-900 bg-opacity-5 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full my-auto p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -193,11 +193,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({
                     max="24"
                     value={hours}
                     onChange={(e) => setHours(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg font-medium text-center ${
-                      errors.hours
-                        ? 'border-red-500 bg-red-50'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg font-medium text-center ${ errors.hours ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400' }`}
                     placeholder="0"
                   />
                   <div className="text-xs text-gray-500 mt-1 text-center">Hours (0-24)</div>
@@ -212,11 +208,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({
                     max="59"
                     value={minutes}
                     onChange={(e) => setMinutes(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg font-medium text-center ${
-                      errors.minutes
-                        ? 'border-red-500 bg-red-50'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg font-medium text-center ${ errors.minutes ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400' }`}
                     placeholder="0"
                   />
                   <div className="text-xs text-gray-500 mt-1 text-center">Minutes (0-59)</div>
@@ -283,11 +275,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({
             <button
               type="submit"
               disabled={isSubmitting || completedTasksCount === 0}
-              className={`flex-1 px-4 py-3 rounded-lg font-semibold transition text-white ${
-                isSubmitting || completedTasksCount === 0
-                  ? 'bg-gray-300 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
+              className={`flex-1 px-4 py-3 rounded-lg font-semibold transition text-white ${ isSubmitting || completedTasksCount === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700' }`}
             >
               {isSubmitting ? 'Submitting...' : 'Submit Report'}
             </button>

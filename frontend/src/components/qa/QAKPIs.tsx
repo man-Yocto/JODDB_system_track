@@ -1,12 +1,36 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ClipboardList, CheckCircle, XCircle, RefreshCw, TrendingUp } from 'lucide-react';
-import { type QAMetrics } from '../../types';
 
 interface QAKPIsProps {
-  metrics: QAMetrics;
+  tasks: any[];
+  inspections: any[];
 }
 
-export const QAKPIs: React.FC<QAKPIsProps> = ({ metrics }) => {
+export const QAKPIs: React.FC<QAKPIsProps> = ({ tasks, inspections }) => {
+  const metrics = useMemo(() => {
+    const pendingInspections = tasks.filter((t: any) => t.status === 'pending_qa' || t.status === 'done').length;
+    const today = new Date().toISOString().split('T')[0];
+    const acceptedToday = inspections.filter((i: any) => 
+      i.decision === 'accepted' && i.created_at.startsWith(today)
+    ).length;
+    const rejectedToday = inspections.filter((i: any) => 
+      i.decision === 'rejected' && i.created_at.startsWith(today)
+    ).length;
+    const reworkTasks = tasks.filter((t: any) => t.status === 'rework_required').length;
+    const totalInspected = inspections.length;
+    const totalAccepted = inspections.filter((i: any) => i.decision === 'accepted').length;
+    const acceptanceRate = totalInspected > 0 ? (totalAccepted / totalInspected) * 100 : 0;
+
+    return {
+      pendingInspections,
+      acceptedToday,
+      rejectedToday,
+      reworkTasks,
+      acceptanceRate: Math.round(acceptanceRate),
+      totalInspected,
+    };
+  }, [tasks, inspections]);
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
       <div className="bg-white rounded-lg border border-gray-200 p-4">

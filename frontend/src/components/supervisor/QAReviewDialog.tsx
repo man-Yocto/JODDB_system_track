@@ -80,11 +80,7 @@ export const QAReviewDialog: React.FC<QAReviewDialogProps> = ({
             </div>
 
             {/* QA Inspection Details */}
-            <div className={`rounded-lg p-4 border ${
-              review.qaDecision === 'accepted'
-                ? 'bg-green-50 border-green-200'
-                : 'bg-red-50 border-red-200'
-            }`}>
+            <div className={`rounded-lg p-4 border ${ review.qaDecision === 'accepted' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200' }`}>
               <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
                 <User className="w-5 h-5" />
                 QA Inspector Decision
@@ -93,11 +89,7 @@ export const QAReviewDialog: React.FC<QAReviewDialogProps> = ({
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-600">Decision:</span>
-                  <span className={`px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2 ${
-                    review.qaDecision === 'accepted'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}>
+                  <span className={`px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2 ${ review.qaDecision === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }`}>
                     {review.qaDecision === 'accepted' ? (
                       <CheckCircle className="w-4 h-4" />
                     ) : (
@@ -141,11 +133,7 @@ export const QAReviewDialog: React.FC<QAReviewDialogProps> = ({
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-600">Decision:</span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      review.supervisorDecision === 'accepted'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${ review.supervisorDecision === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }`}>
                       {review.supervisorDecision}
                     </span>
                   </div>
@@ -166,11 +154,7 @@ export const QAReviewDialog: React.FC<QAReviewDialogProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                     <button
                       onClick={() => setDecision('accept')}
-                      className={`p-4 rounded-lg border-2 transition ${
-                        decision === 'accept'
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-300 hover:border-green-400'
-                      }`}
+                      className={`p-4 rounded-lg border-2 transition ${ decision === 'accept' ? 'border-green-600 bg-green-50' : 'border-gray-300 hover:border-green-400' }`}
                     >
                       <CheckCircle className={`w-6 h-6 mx-auto mb-2 ${decision === 'accept' ? 'text-green-600' : 'text-gray-400'}`} />
                       <div className="font-semibold text-center">Approve QA Decision</div>
@@ -181,11 +165,7 @@ export const QAReviewDialog: React.FC<QAReviewDialogProps> = ({
 
                     <button
                       onClick={() => setDecision('reject')}
-                      className={`p-4 rounded-lg border-2 transition ${
-                        decision === 'reject'
-                          ? 'border-red-600 bg-red-50'
-                          : 'border-gray-300 hover:border-red-400'
-                      }`}
+                      className={`p-4 rounded-lg border-2 transition ${ decision === 'reject' ? 'border-red-600 bg-red-50' : 'border-gray-300 hover:border-red-400' }`}
                     >
                       <XCircle className={`w-6 h-6 mx-auto mb-2 ${decision === 'reject' ? 'text-red-600' : 'text-gray-400'}`} />
                       <div className="font-semibold text-center">Reject QA Decision</div>

@@ -33,8 +33,8 @@ def calculate_technician_metrics(technician_id: int, target_date: datetime.date)
     # Base query for all completed tasks by this tech on this day
     completed_tasks = Task.objects.filter(
         technician_id=technician_id,
-        status=Task.Status.COMPLETED,
-        ended_at__date=target_date
+        status='done',
+        end_time__date=target_date
     )
 
     if not completed_tasks.exists():
@@ -46,28 +46,28 @@ def calculate_technician_metrics(technician_id: int, target_date: datetime.date)
             "date": target_date.isoformat(),
         }
 
-    # 1. Aggregate total standard and actual time
+    # 1. Aggregate total standard and actual time (in seconds)
     aggregates = completed_tasks.aggregate(
-        total_standard_time=Sum('standard_time'),
-        total_actual_time=Sum('actual_time')
+        total_standard_time=Sum('standard_time_seconds'),
+        total_actual_time=Sum('actual_time_seconds')
     )
 
-    total_standard_seconds = (aggregates['total_standard_time'] or datetime.timedelta(0)).total_seconds()
-    total_actual_seconds = (aggregates['total_actual_time'] or datetime.timedelta(0)).total_seconds()
+    total_standard_seconds = aggregates['total_standard_time'] or 0
+    total_actual_seconds = aggregates['total_actual_time'] or 0
 
     # 2. Calculate metrics
     # Productivity = (Time Earned) / (Time Available)
-    productivity = (total_standard_seconds / TOTAL_AVAILABLE_TIME_SECONDS) * 100.0
+    productivity = (total_standard_seconds / TOTAL_AVAILABLE_TIME_SECONDS) * 100.0 if TOTAL_AVAILABLE_TIME_SECONDS > 0 else 0.0
 
     # Utilization = (Time Worked) / (Time Available)
-    utilization = (total_actual_seconds / TOTAL_AVAILABLE_TIME_SECONDS) * 100.0
+    utilization = (total_actual_seconds / TOTAL_AVAILABLE_TIME_SECONDS) * 100.0 if TOTAL_AVAILABLE_TIME_SECONDS > 0 else 0.0
 
     # 3. Calculate Average Efficiency in Python to avoid DB-specific division issues
     # Efficiency = (Time Earned) / (Time Worked)
     efficiencies = []
-    for task in completed_tasks.only('standard_time', 'actual_time'):
-        std_sec = task.standard_time.total_seconds()
-        act_sec = task.actual_time.total_seconds()
+    for task in completed_tasks.only('standard_time_seconds', 'actual_time_seconds'):
+        std_sec = task.standard_time_seconds or 0
+        act_sec = task.actual_time_seconds or 0
         
         if act_sec > 0:
             efficiencies.append((std_sec / act_sec) * 100.0)
@@ -104,8 +104,8 @@ def calculate_job_order_progress(job_order_id: int) -> dict:
 
     # Aggregate counts based on status
     status_counts = device_statuses.aggregate(
-        total_completed=Count('id', filter=Q(status=Device.Status.COMPLETED)),
-        total_rejected=Count('id', filter=Q(status=Device.Status.REJECTED))
+        total_completed=Count('id', filter=Q(current_status='completed')),
+        total_rejected=Count('id', filter=Q(current_status='rejected'))
     )
 
     total_completed = status_counts.get('total_completed', 0)
@@ -137,9 +137,9 @@ def check_alerts(job_order_id: int, technician_id: int = None) -> list:
     # Find any completed task with efficiency < threshold
     
     tasks_query = Task.objects.filter(
-        device__job_order_id=job_order_id,
-        status=Task.Status.COMPLETED,
-        actual_time__gt=datetime.timedelta(seconds=0) # Avoid division by zero
+        job_order_id=job_order_id,
+        status='done',
+        actual_time_seconds__gt=0  # Avoid division by zero
     ).select_related('technician')
 
     if technician_id:
@@ -148,8 +148,8 @@ def check_alerts(job_order_id: int, technician_id: int = None) -> list:
     # We must loop in Python as (Duration / Duration) * float
     # is not reliably supported in all DB backends (e.g., SQLite)
     for task in tasks_query:
-        std_sec = task.standard_time.total_seconds()
-        act_sec = task.actual_time.total_seconds()
+        std_sec = task.standard_time_seconds or 0
+        act_sec = task.actual_time_seconds or 0
         
         if act_sec > 0:
             efficiency = (std_sec / act_sec) * 100.0
@@ -171,7 +171,7 @@ def check_alerts(job_order_id: int, technician_id: int = None) -> list:
             
             # Check if JO is due soon, not already completed, and has a due date
             if (job_order.due_date and
-                job_order.status != JobOrder.Status.COMPLETED and
+                job_order.status != 'done' and
                 job_order.due_date <= (today + datetime.timedelta(days=DUE_DATE_DAYS_THRESHOLD))):
                 
                 # If due soon, check progress

@@ -31,7 +31,11 @@ export const TestTechnicianPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header onLogout={handleLogout} />
+      <Header 
+        title="Test Technician Dashboard" 
+        subtitle="Quality testing and verification"
+        onLogout={handleLogout} 
+      />
       <main className="container mx-auto py-6 px-4">
         <div className="mb-6 bg-gradient-to-r from-purple-500 to-indigo-600 text-white p-4 rounded-lg shadow-lg">
           <h1 className="text-2xl font-bold">Test Technician Dashboard</h1>
