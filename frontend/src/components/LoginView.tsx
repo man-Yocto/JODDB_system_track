@@ -99,15 +99,6 @@ export const LoginView: React.FC = () => {
             'Login'
           )}
         </button>
-
-        {/* Demo credentials hint */}
-        <div className="mt-4 text-xs text-gray-500 text-center">
-          <p className="font-semibold mb-1">Demo Credentials:</p>
-          <p>User: user / user123</p>
-          <p>Supervisor: supervisor / super123</p>
-          <p>Planner: planner / plan123</p>
-          <p>QA: quality / qa123</p>
-        </div>
       </form>
     </div>
   );

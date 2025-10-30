@@ -82,7 +82,7 @@ export const InspectionDialog: React.FC<InspectionDialogProps> = ({
       <div className="fixed inset-0 flex items-center justify-center z-50 p-4 pointer-events-none">
         <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto pointer-events-auto">
           {/* Header */}
-          <div className="px-6 py-4 border-b flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+          <div className="px-6 py-4 border-b flex justify-between items-center bg-linear-to-r from-blue-600 to-blue-700 text-white">
             <div>
               <h2 className="text-xl font-bold">Quality Inspection</h2>
               <p className="text-sm text-blue-100 mt-0.5">Task #{task.id}</p>
@@ -97,7 +97,7 @@ export const InspectionDialog: React.FC<InspectionDialogProps> = ({
             {/* Error Message */}
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
                 <div>
                   <div className="font-semibold text-red-900">Error</div>
                   <div className="text-sm text-red-700 mt-1">{error}</div>
@@ -179,7 +179,7 @@ export const InspectionDialog: React.FC<InspectionDialogProps> = ({
               {/* Efficiency Warning */}
               {efficiency > 0 && efficiency < 60 && (
                 <div className="mt-3 bg-red-100 border border-red-300 rounded-lg p-3 flex items-start gap-2">
-                  <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                   <div className="text-sm text-red-800">
                     <strong>Low Efficiency Alert:</strong> This task has below-target efficiency. 
                     Consider reviewing the work quality and technician performance.

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { CheckCircle, XCircle, Clock, TrendingUp, AlertTriangle, Search } from 'lucide-react';
+import { Clock, TrendingUp, Search } from 'lucide-react';
 import { type PlannerTask } from '../../types';
 import { TaskApprovalDrawer } from './TaskApprovalDrawer';
 

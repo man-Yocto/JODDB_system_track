@@ -22,62 +22,99 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ onItemClick }) => {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchReviewQueue();
+    
+    // Auto-refresh every 30 seconds to catch new QA completions
+    const interval = setInterval(fetchReviewQueue, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchReviewQueue = async () => {
     try {
       setLoading(true);
+      setError(null);
       
-      // Fetch tasks that need supervisor review (completed tasks)
-      const tasks = await api.tasks.getTasks();
-      const [jobOrders, users] = await Promise.all([
+      // Fetch supervisor reviews that are awaiting supervisor review (tester_approved or pending_supervisor tasks)
+      const [tasks, jobOrders, users] = await Promise.all([
+        api.tasks.getTasks(),
         api.jobOrders.getJobOrders(),
         api.users.getUsers(),
       ]);
       
-      // Filter tasks that are completed and awaiting review
-      const tasksAwaitingReview = tasks.filter(
-        task => task.status === 'pending-approval' || task.status === 'done'
-      );
+      console.log('📋 ReviewQueue - Fetched data:', {
+        tasksCount: tasks.length,
+        testerApprovedCount: tasks.filter(t => t.status === 'tester_approved' || t.status === 'pending_supervisor').length,
+        jobOrdersCount: jobOrders.length,
+        usersCount: users.length,
+      });
       
       // Create lookup maps
-      const jobOrderMap = new Map(jobOrders.map(jo => [jo.id, jo]));
       const userMap = new Map(users.map(u => [u.id, u]));
       
+      // Filter tasks that are tester_approved or pending_supervisor (awaiting supervisor review)
+      const tasksAwaitingReview = tasks.filter(
+        task => task.status === 'tester_approved' || task.status === 'pending_supervisor'
+      );
+      
+      console.log('📋 ReviewQueue - Found tester_approved or pending_supervisor tasks:', tasksAwaitingReview.map(t => ({ id: t.id, operation: t.operation_name })));
+      console.log('📋 ReviewQueue - Sample task object:', tasksAwaitingReview[0]);
+      
       // Convert tasks to review items
+      // Note: API returns job_order_code string, not job_order ID
       const reviewItems: ReviewItem[] = tasksAwaitingReview
-        .filter(task => task.job_order) // Only include tasks with valid job_order
         .map(task => {
-          const jobOrder = jobOrderMap.get(task.job_order);
-          const technician = task.technician ? userMap.get(task.technician) : null;
+          // Find job order by matching order_code
+          const jobOrderCode = (task as any).job_order_code;
+          const jobOrder = jobOrders.find(jo => jo.order_code === jobOrderCode);
+          const jobOrderId = jobOrder?.id;
           
-          // Determine priority based on efficiency and status
+          console.log(`📋 ReviewQueue - Task ${task.id}: code="${jobOrderCode}" → jobOrderId=${jobOrderId}`);
+          
+          // Get technician from lookup map using task.technician (ID) if available
+          // Otherwise use task.technician_username
+          const technicianId = task.technician;
+          const technician = technicianId ? userMap.get(technicianId) : null;
+          const technicianUsername = (task as any).technician_username;
+          
+          // Determine priority based on time to approve (newer = higher priority)
+          // High priority: Tasks that have been waiting longer (older end_time)
           let priority: 'high' | 'medium' | 'low' = 'medium';
-          if (task.efficiency && task.efficiency < 70) {
-            priority = 'high';
-          } else if (task.efficiency && task.efficiency > 90) {
-            priority = 'low';
+          if (task.end_time) {
+            const endTime = new Date(task.end_time).getTime();
+            const now = new Date().getTime();
+            const hoursWaiting = (now - endTime) / (1000 * 60 * 60);
+            
+            if (hoursWaiting > 24) {
+              priority = 'high'; // Waiting more than 24 hours
+            } else if (hoursWaiting < 2) {
+              priority = 'low'; // Just finished recently
+            }
           }
           
           return {
             id: task.id.toString(),
             type: 'device' as const,
             itemDescription: task.operation_name || 'Task',
-            jobTitle: jobOrder?.title || jobOrder?.order_code || 'N/A',
-            technicianName: technician?.full_name || technician?.username || 'Unknown',
+            jobTitle: jobOrder?.title || jobOrder?.order_code || jobOrderCode || 'N/A',
+            technicianName: technician?.full_name || technician?.username || technicianUsername || 'Unknown',
             submittedAt: task.end_time || task.updated_at,
             priority,
             taskId: task.id,
-            jobId: task.job_order.toString(),
+            jobId: jobOrderId?.toString() || jobOrderCode || 'N/A',
           };
         });
       
+      console.log('📋 ReviewQueue - Converted to review items:', reviewItems.length);
+      console.log('📋 ReviewQueue - Sample item:', reviewItems[0]);
       setItems(reviewItems);
     } catch (error) {
-      console.error('Error fetching review queue:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('❌ Error fetching review queue:', errorMsg);
+      setError(errorMsg);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -97,11 +134,11 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ onItemClick }) => {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
-        <div className="px-6 py-4 border-b border-gray-200">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 shrink-0">
           <h2 className="text-lg font-semibold text-gray-800 mb-3">Review Queue</h2>
         </div>
-        <div className="p-8 text-center text-gray-500">
+        <div className="flex-1 p-8 text-center text-gray-500 flex items-center justify-center">
           <div className="animate-pulse">Loading...</div>
         </div>
       </div>
@@ -109,10 +146,25 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ onItemClick }) => {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
-      <div className="px-6 py-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-3">Review Queue</h2>
-        <div className="flex gap-2">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full min-h-96 flex flex-col overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-200 shrink-0">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-800">Review Queue</h2>
+          <button
+            onClick={fetchReviewQueue}
+            disabled={loading}
+            className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition disabled:opacity-50"
+            title="Refresh review queue"
+          >
+            ↻ Refresh
+          </button>
+        </div>
+        {error && (
+          <div className="mb-3 p-2 bg-red-100 border border-red-300 rounded text-xs text-red-700">
+            Error: {error}
+          </div>
+        )}
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setFilter('all')}
             className={`px-3 py-1 text-sm rounded-full transition ${
@@ -140,11 +192,14 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ onItemClick }) => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
         {filteredItems.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
             <p>No items in queue</p>
+            <p className="text-xs mt-4 text-gray-400">
+              {items.length === 0 ? 'No tester_approved or pending_supervisor tasks found' : `(${items.length} items hidden by filter)`}
+            </p>
           </div>
         ) : (
           filteredItems.map(item => (
@@ -155,9 +210,9 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ onItemClick }) => {
             >
               <div className="flex items-start gap-2">
                 {item.type === 'device' ? (
-                  <Package className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0" />
+                  <Package className="w-4 h-4 text-gray-600 mt-0.5 shrink-0" />
                 ) : (
-                  <FileText className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0" />
+                  <FileText className="w-4 h-4 text-gray-600 mt-0.5 shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <h4 className="font-semibold text-sm text-gray-800 truncate">{item.itemDescription}</h4>

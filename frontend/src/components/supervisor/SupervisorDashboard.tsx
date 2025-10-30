@@ -10,6 +10,8 @@ import { JobOrderDetails } from './JobOrderDetails';
 import { TechnicianReviewLog } from './TechnicianReviewLog';
 import { AlertsCenter } from './AlertsCenter';
 import { ReportsView } from './ReportsView';
+import { SupervisorReviewDialog } from './SupervisorReviewDialog';
+import { inspectionAPI } from '../../services/api';
 
 type View = 'dashboard' | 'job-details' | 'technician-log' | 'alerts' | 'reports';
 
@@ -17,6 +19,9 @@ export const SupervisorDashboard: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedTechnicianId, setSelectedTechnicianId] = useState<string | null>(null);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [reviewDialogItem, setReviewDialogItem] = useState<any | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
@@ -30,9 +35,18 @@ export const SupervisorDashboard: React.FC = () => {
     setCurrentView('technician-log');
   };
 
-  const handleReviewItemClick = (item: any) => {
-    if (item.jobId) {
-      handleJobClick(item.jobId);
+  const handleReviewItemClick = async (item: any) => {
+    // Fetch inspection for the selected task
+    try {
+      const inspection = await inspectionAPI.getInspectionForTask(item.taskId);
+      console.log('Supervisor Review - Task:', item.taskId);
+      console.log('Supervisor Review - Inspection:', inspection);
+      setReviewDialogItem({ ...item, inspectionId: inspection.id });
+      setReviewDialogOpen(true);
+    } catch (err) {
+      console.error('Supervisor Review - Error fetching inspection:', err);
+      setReviewDialogItem({ ...item, inspectionId: undefined });
+      setReviewDialogOpen(true);
     }
   };
 
@@ -47,6 +61,12 @@ export const SupervisorDashboard: React.FC = () => {
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const handleReviewSubmitted = () => {
+    // Close dialog and refresh the review queue
+    setReviewDialogOpen(false);
+    setRefreshKey(prev => prev + 1);
   };
 
   const renderView = () => {
@@ -75,16 +95,29 @@ export const SupervisorDashboard: React.FC = () => {
 
               {/* Right Column - Review Queue */}
               <div>
-                <ReviewQueue onItemClick={handleReviewItemClick} />
+                <ReviewQueue key={refreshKey} onItemClick={handleReviewItemClick} />
               </div>
             </div>
+            {/* Supervisor Review Dialog */}
+            {reviewDialogOpen && reviewDialogItem && (
+              <SupervisorReviewDialog
+                isOpen={reviewDialogOpen}
+                onClose={() => setReviewDialogOpen(false)}
+                taskId={reviewDialogItem.taskId}
+                taskOperation={reviewDialogItem.itemDescription}
+                technicianName={reviewDialogItem.technicianName}
+                jobOrderCode={reviewDialogItem.jobTitle}
+                inspectionId={reviewDialogItem.inspectionId}
+                onReviewSubmitted={handleReviewSubmitted}
+              />
+            )}
           </div>
         );
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <Header 
         title="Supervisor Dashboard" 
@@ -93,8 +126,8 @@ export const SupervisorDashboard: React.FC = () => {
         onLogout={handleLogout}
       />
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      {/* Main Content with scrolling */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
         {renderView()}
       </div>
     </div>

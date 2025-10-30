@@ -1,3 +1,33 @@
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+# API endpoint to get the inspection for a given task (for supervisor review)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_inspection_for_task(request, task_id):
+    """
+    Returns the inspection for a given task, prioritizing decision 'accepted'.
+    Only supervisors, testers, and admins can access this endpoint.
+    """
+    from core.models import Inspection
+    
+    # Check if user is authorized (supervisor, tester, or admin)
+    if request.user.role not in ['supervisor', 'tester', 'admin', 'quality']:
+        return Response({'detail': 'Not authorized to access this endpoint.'}, status=403)
+    
+    inspections = Inspection.objects.filter(task_id=task_id).order_by('-created_at')
+    accepted = inspections.filter(decision='accepted').first()
+    inspection = accepted if accepted else inspections.first()
+    if inspection:
+        data = {
+            'id': inspection.id,
+            'task': inspection.task_id,
+            'decision': inspection.decision,
+            'comments': inspection.comments,
+            'created_at': inspection.created_at,
+        }
+        return Response(data)
+    return Response({'detail': 'No inspection found for this task.'}, status=404)
 # core/views.py
 
 from rest_framework import viewsets, mixins, status
@@ -8,11 +38,24 @@ from rest_framework.views import APIView
 from django.utils import timezone
 from django.db import models # Import models for Q object
 from django.db.models import Q, Count, Sum
-from core.serializers import JobOrderCreateSerializer, JobOrderSerializer, TaskSerializer , UserRegistrationSerializer , PrivilegedUserCreateSerializer , InspectionSerializer, SupervisorReviewSerializer, JobSerializer, JobCreateSerializer, ProcessSerializer
-from core.permissions import IsRoleRequired , IsPlanningEngineer, IsSupervisor # Import the custom permission
+from core.serializers import JobOrderCreateSerializer, JobOrderSerializer, TaskSerializer , UserRegistrationSerializer , PrivilegedUserCreateSerializer , InspectionSerializer, SupervisorReviewSerializer, TesterReviewSerializer, JobSerializer, JobCreateSerializer, ProcessSerializer
+from core.permissions import (
+    IsRoleRequired, 
+    IsPlanningEngineer, 
+    IsSupervisor,
+    IsTechnicianOrAll,
+    IsQualityOrTesterOrAdmin,
+    IsPlanningOrAdminOrSupervisorOrQuality,
+    IsPlanningOrAdmin,
+    IsSupervisorOrAdmin,
+    IsSupervisorOrPlanningOrAdmin,
+    IsTesterOrAdmin,
+    IsTesterOrSupervisorOrAdmin,
+    IsQualityOrTesterOrSupervisorOrAdmin,
+)
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from core.models import User, JobOrder, Device, Task , Inspection, SupervisorReview, Job, Process
+from core.models import User, JobOrder, Device, Task , Inspection, SupervisorReview, TesterReview, Job, Process
 from rest_framework.generics import CreateAPIView
 from rest_framework.permissions import AllowAny
 #### Import for notifications
@@ -119,7 +162,7 @@ class JobOrderViewSet(viewsets.ModelViewSet):
         """Custom permissions based on action."""
         if self.action == 'create':
             # PE only for creation (Role: 'planning' or 'admin')
-            self.permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'admin'])]
+            self.permission_classes = [IsAuthenticated, IsPlanningOrAdmin]
         else:
             # All authenticated roles for list/retrieve
             self.permission_classes = [IsAuthenticated]
@@ -145,7 +188,7 @@ class TechnicianTaskViewSet(
     Viewset for Technicians to manage their task lifecycle (start/end).
     """
     serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated, IsRoleRequired(['technician', 'tester', 'admin', 'planning'])]
+    permission_classes = [IsAuthenticated, IsTechnicianOrAll]
 
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""
@@ -156,18 +199,23 @@ class TechnicianTaskViewSet(
 
     def get_queryset(self):
         """
-        Filter tasks to show:
-        1. All 'available' tasks matching user's role (for user to start)
-        2. Tasks 'in_progress' assigned to the authenticated user
-        3. Tasks 'pending-approval' assigned to the user (completed, awaiting review)
-        4. Tasks 'approved' assigned to the user (approved)
-        5. For planners/admin: all tasks including pending-approval
+        Filter tasks to show only what's relevant for each role in the workflow:
         
-        Task types are filtered by user role:
-        - technician role sees: technician tasks
-        - quality role sees: quality tasks
-        - tester role sees: tester tasks
-        - planning/admin: see all task types
+        TECHNICIAN: 
+        - 'available' (can start)
+        - 'in_progress' (currently working)
+        - 'rejected' (needs to fix and resubmit)
+        
+        QA INSPECTOR:
+        - 'pending_qa' (ready for QA review)
+        
+        SUPERVISOR:
+        - 'qa_approved' (passed QA, awaiting supervisor review)
+        
+        TESTER:
+        - 'pending_tester' (passed supervisor, ready for final testing)
+        
+        PLANNING/ADMIN: All tasks (for overview)
         """
         user = self.request.user
         if not user.is_authenticated:
@@ -175,31 +223,35 @@ class TechnicianTaskViewSet(
 
         queryset = Task.objects.select_related('device', 'job_order', 'technician')
         
-        # Map user roles to task types
-        role_task_type_map = {
-            'technician': 'technician',
-            'quality_inspector': 'quality',
-            'tester': 'tester',
-        }
-        
-        if user.role in ['technician', 'quality_inspector', 'tester']:
-            task_type = role_task_type_map.get(user.role)
-            # User sees:
-            # - Available tasks of their type (anyone can start these)
-            # - Their own in-progress tasks
-            # - Their own pending-approval tasks (awaiting planner review)
-            # - Their own approved tasks (planner approved)
+        if user.role == 'technician':
+            # Technicians see: available tasks, their own in-progress, and their own rejected
             return queryset.filter(
-                task_type=task_type
-            ).filter(
-                Q(status='available') | Q(technician=user, status__in=['in_progress', 'pending-approval', 'approved', 'done'])
+                Q(status='available', task_type='technician') |
+                Q(technician=user, status__in=['in_progress', 'rejected'])
             )
         
-        if user.role == 'planning':
+        elif user.role == 'quality':
+            # QA Inspectors see: pending_qa tasks (ready for inspection)
+            # These come from technician tasks that have been completed
+            return queryset.filter(status='pending_qa')
+        
+        elif user.role == 'supervisor':
+            # Supervisors see: tester_approved or pending_supervisor tasks (passed tester, awaiting supervisor review)
+            return queryset.filter(
+                status__in=['tester_approved', 'pending_supervisor']
+            )
+        
+        elif user.role == 'tester':
+            # Testers see: pending_tester tasks (ready for final testing)
+            # These come from technician tasks that passed supervisor review
+            return queryset.filter(status='pending_tester')
+        
+        elif user.role in ['planning', 'admin']:
+            # Planning engineers and admins see all tasks
             return queryset
-
-        # Planners and other roles (admin, supervisor, etc.) can see all active tasks including pending-approval
-        return queryset.filter(status__in=['available', 'in_progress', 'pending-approval', 'approved', 'rejected', 'done'])
+        
+        # Default: no access
+        return Task.objects.none()
 
 
     @action(detail=True, methods=['patch'])
@@ -234,15 +286,13 @@ class TechnicianTaskViewSet(
     def end(self, request, pk=None):
         """
         Action for a Technician to end a task.
-        Calculates actual_time_seconds and efficiency, sets end_time and status = 'done'.
+        Calculates actual_time_seconds and efficiency, sets end_time and status = 'pending_qa'.
         
-        CRITICAL WORKFLOW:
-        1. Mark task as 'done'
+        WORKFLOW AFTER TECHNICIAN COMPLETION:
+        1. Mark task as 'pending_qa' (awaiting QA Inspector)
         2. Create Inspection record (status='pending')
-        3. Send notifications to QI, Testing Technician, and Supervisor
+        3. Send notifications to QI, Supervisor, and Tester
         4. Update device status to 'completed'
-        
-        This ensures QI and Testing Technician see the task in their pending inspection queues.
         """
         task = self.get_object()
         user = request.user
@@ -274,8 +324,8 @@ class TechnicianTaskViewSet(
             time_difference: datetime.timedelta = task.end_time - task.start_time
             task.actual_time_seconds = int(time_difference.total_seconds())
             
-            # 3. Set status to 'done' (completed and ready for inspection)
-            task.status = 'done'
+            # 3. Set status to 'pending_qa' (waiting for QA Inspector approval)
+            task.status = 'pending_qa'
             
             # 4. Save task updates
             task.save(update_fields=['end_time', 'actual_time_seconds', 'status', 'updated_at'])
@@ -451,10 +501,10 @@ class UserManagementViewSet(viewsets.ModelViewSet):
         """Only Admin and Planning Engineer can manage users."""
         if self.action in ['list', 'retrieve']:
             # Allow supervisors and quality inspectors to list/view users for metrics and reporting
-            self.permission_classes = [IsAuthenticated, IsRoleRequired(['admin', 'planning', 'supervisor', 'quality'])]
+            self.permission_classes = [IsAuthenticated, IsPlanningOrAdminOrSupervisorOrQuality]
         else:
             # Only admin and planning can create/update/delete users
-            self.permission_classes = [IsAuthenticated, IsRoleRequired(['admin', 'planning'])]
+            self.permission_classes = [IsAuthenticated, IsPlanningOrAdmin]
         return [permission() for permission in self.permission_classes]
     
 # -----------------------------------------------------------
@@ -472,20 +522,26 @@ class InspectionViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets
 
     def get_queryset(self):
         """
-        Filter inspections based on user role:
-        - Quality Inspectors: see all inspections
-        - Testers: see only their own inspections
-        - Supervisors: see all inspections
+        Filter inspections based on user role and workflow stage:
+        - Quality Inspectors: see inspections of tasks with status='pending_qa'
+        - Supervisors: see all inspections for review purposes
         - Admin: see all inspections
         """
         user = self.request.user
         
-        if user.role in ['quality', 'supervisor', 'admin']:
-            # QI, Supervisor, Admin see all inspections
+        if user.role == 'quality':
+            # QA Inspectors see only inspections for tasks awaiting QA (pending_qa status)
+            return Inspection.objects.filter(
+                task__status='pending_qa'
+            ).select_related('task', 'task__device', 'inspector')
+        elif user.role in ['supervisor', 'admin']:
+            # Supervisor and Admin see all inspections for overview
             return Inspection.objects.all().select_related('task', 'task__device', 'inspector')
         elif user.role == 'tester':
-            # Tester sees only their own inspections
-            return Inspection.objects.filter(inspector=user).select_related('task', 'task__device', 'inspector')
+            # Testers see inspections for their tasks that are pending testing
+            return Inspection.objects.filter(
+                task__status='pending_tester'
+            ).select_related('task', 'task__device', 'inspector')
         
         return Inspection.objects.none()
 
@@ -496,51 +552,65 @@ class InspectionViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets
         - List: Quality Inspector, Tester, Supervisor, or Admin
         """
         if self.action == 'create':
-            self.permission_classes = [IsAuthenticated, IsRoleRequired(['quality', 'tester', 'admin'])]
+            self.permission_classes = [IsAuthenticated, IsQualityOrTesterOrAdmin]
         else:
-            # List action
-            self.permission_classes = [IsAuthenticated, IsRoleRequired(['quality', 'tester', 'supervisor', 'admin'])]
+            # List action - Quality needs to be included!
+            self.permission_classes = [IsAuthenticated, IsQualityOrTesterOrSupervisorOrAdmin]
         return [permission() for permission in self.permission_classes]
 
     def perform_create(self, serializer):
         """
-        Saves the inspection and updates the Task status based on the decision,
-        and triggers a notification upon rejection.
+        Updates the existing pending inspection for the task instead of creating a new one.
         """
         decision = serializer.validated_data['decision']
-        task = serializer.validated_data.pop('task_id')  # Remove from validated_data and get the task object
-        
+        task = serializer.validated_data.pop('task_id')
+        comments = serializer.validated_data.get('comments', '')
+
         with transaction.atomic():
-            # 1. Save the Inspection record
-            inspection = serializer.save(inspector=self.request.user, device=task.device, task=task)
-            
-            # 2. Update Task status
+            # Find the pending inspection for this task
+            inspection = Inspection.objects.filter(task=task, decision='pending').order_by('-created_at').first()
+            if inspection:
+                inspection.inspector = self.request.user
+                inspection.decision = decision
+                inspection.comments = comments
+                inspection.save(update_fields=['inspector', 'decision', 'comments', 'created_at'])
+            else:
+                # Fallback: create a new inspection if none exists
+                inspection = serializer.save(inspector=self.request.user, device=task.device, task=task)
+
+            # Update Task status based on QA decision
             if decision == 'accepted':
-                # Task moves to the next stage
-                task_new_status = 'pending_supervisor'
-                task.status = task_new_status
+                task.status = 'pending_tester'
                 task.save(update_fields=['status', 'updated_at'])
-            
+                testers = User.objects.filter(role='tester', is_active=True)
+                for tester in testers:
+                    create_notification(
+                        user_id=tester.id,
+                        type='task_ready_for_testing',
+                        message=f"Task #{task.id} passed QA inspection and is ready for final testing.",
+                        payload={
+                            'task_id': task.id,
+                            'job_order_code': task.job_order.order_code,
+                            'device_serial': task.device.serial_number
+                        }
+                    )
             elif decision == 'rejected':
-                # Task goes back to the Technician
-                task_new_status = 'rejected' 
-                task.status = task_new_status
-                task.device.current_status = 'rejected' # Update device status
+                task.status = 'rejected'
+                task.device.current_status = 'rejected'
                 task.save(update_fields=['status', 'updated_at'])
                 task.device.save(update_fields=['current_status', 'last_updated'])
-
-                # 3. TRIGGER NOTIFICATION TO TECHNICIAN
                 if task.technician:
-                    message = f"Task {task.id} on device {task.device.serial_number} was rejected by QI: {inspection.comments[:50]}..."
-                    create_notification( # <--- هنا يتم استخدام الدالة
+                    message = f"Task #{task.id} was rejected by QA Inspector: {inspection.comments[:50]}..."
+                    create_notification(
                         user_id=task.technician.id,
                         type='task_rejected',
                         message=message,
-                        payload={'task_id': task.id, 'job_order_code': task.job_order.order_code}
+                        payload={
+                            'task_id': task.id,
+                            'job_order_code': task.job_order.order_code,
+                            'inspection_id': inspection.id
+                        }
                     )
-                
-            # If the task status changes, the JobOrder status might need to be updated as well
-            # (Logic for JobOrder update is complex and left outside the scope of this prompt)
 
 
 # -----------------------------------------------------------
@@ -552,47 +622,196 @@ class SupervisorReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, vi
     Viewset for Supervisor to perform the final review of an inspection.
     """
     serializer_class = SupervisorReviewSerializer
-    queryset = SupervisorReview.objects.all().select_related('inspection', 'supervisor')
+    
+    def get_queryset(self):
+        """
+        Filter supervisor reviews based on user role:
+        - Supervisors: see reviews of tasks awaiting supervisor review (pending_supervisor status)
+        - Planning/Admin: see all reviews
+        """
+        user = self.request.user
+        
+        if user.role == 'supervisor':
+            # Supervisors see reviews for tasks that are pending_supervisor (awaiting their review)
+            return SupervisorReview.objects.filter(
+                inspection__task__status='pending_supervisor'
+            ).select_related('inspection', 'supervisor', 'inspection__task')
+        elif user.role in ['planning', 'admin']:
+            # Planning engineers and admins see all reviews
+            return SupervisorReview.objects.all().select_related('inspection', 'supervisor', 'inspection__task')
+        
+        return SupervisorReview.objects.none()
     
     def get_permissions(self):
         """Supervisor only for create, Supervisor/PE for list."""
         if self.action == 'create':
-            self.permission_classes = [IsAuthenticated, IsRoleRequired(['supervisor', 'admin'])]
+            self.permission_classes = [IsAuthenticated, IsSupervisorOrAdmin]
         else:
-            self.permission_classes = [IsAuthenticated, IsRoleRequired(['supervisor', 'planning', 'admin'])]
+            self.permission_classes = [IsAuthenticated, IsSupervisorOrPlanningOrAdmin]
         return [permission() for permission in self.permission_classes]
     
     def perform_create(self, serializer):
         """
-        Saves the review and updates the final Task status based on the decision.
+        Saves the supervisor review and updates the Task status.
+        
+        Workflow:
+        - If accepted: task.status = 'supervisor_approved' (task complete)
+        - If rejected: task.status = 'rejected' (task failed supervisor review)
         """
         decision = serializer.validated_data['decision']
-        inspection = serializer.validated_data['inspection_id']
-        task = inspection.task # Get the related Task
+        inspection = serializer.validated_data['inspection']
+        task = inspection.task  # Get the related Task
         
         with transaction.atomic():
             # 1. Save the Review record
             supervisor_review = serializer.save(supervisor=self.request.user)
             
-            # 2. Update Task status
+            # 2. Update Task status based on supervisor decision
             if decision == 'accepted':
-                # Task is fully completed and accepted
-                task_new_status = 'completed' # Assumes 'completed' is an available choice
-                device_new_status = 'completed'
-            elif decision == 'rejected':
-                # Final rejection, the task/device goes back to the rejected status for follow-up
-                task_new_status = 'rejected' 
-                device_new_status = 'rejected'
-
-            task.status = task_new_status
-            task.save(update_fields=['status', 'updated_at'])
+                # Supervisor approved: task is complete
+                task.status = 'supervisor_approved'
+                task.device.current_status = 'completed'
+                task.save(update_fields=['status', 'updated_at'])
+                task.device.save(update_fields=['current_status', 'last_updated'])
+                
+                # Notify relevant stakeholders
+                if task.technician:
+                    create_notification(
+                        user_id=task.technician.id,
+                        type='task_completed',
+                        message=f"Task #{task.id} completed successfully after supervisor review.",
+                        payload={
+                            'task_id': task.id,
+                            'job_order_code': task.job_order.order_code
+                        }
+                    )
+                
+                # Notify testers
+                testers = User.objects.filter(role='tester', is_active=True)
+                for tester in testers:
+                    create_notification(
+                        user_id=tester.id,
+                        type='task_completed',
+                        message=f"Task #{task.id} completed after supervisor review.",
+                        payload={
+                            'task_id': task.id,
+                            'job_order_code': task.job_order.order_code,
+                            'device_serial': task.device.serial_number
+                        }
+                    )
             
-            # Update Device status based on final review
-            task.device.current_status = device_new_status
-            task.device.save(update_fields=['current_status', 'last_updated'])
+            elif decision == 'rejected':
+                # Supervisor rejected: task fails supervisor review
+                task.status = 'rejected'
+                task.device.current_status = 'rejected'
+                task.save(update_fields=['status', 'updated_at'])
+                task.device.save(update_fields=['current_status', 'last_updated'])
+                
+                # Notify technician of rejection
+                if task.technician:
+                    create_notification(
+                        user_id=task.technician.id,
+                        type='task_rejected',
+                        message=f"Task #{task.id} was rejected during supervisor review: {supervisor_review.comments[:50]}...",
+                        payload={
+                            'task_id': task.id,
+                            'job_order_code': task.job_order.order_code
+                        }
+                    )
             
             return supervisor_review
         
+
+class TesterReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
+    """
+    Viewset for Tester to perform final testing and approval of tasks.
+    This is the final stage before task completion.
+    """
+    serializer_class = TesterReviewSerializer
+    queryset = TesterReview.objects.all().select_related('task', 'tester')
+    
+    def get_permissions(self):
+        """Tester only for create, Tester/Supervisor for list."""
+        if self.action == 'create':
+            self.permission_classes = [IsAuthenticated, IsTesterOrAdmin]
+        else:
+            self.permission_classes = [IsAuthenticated, IsTesterOrSupervisorOrAdmin]
+        return [permission() for permission in self.permission_classes]
+    
+    def get_queryset(self):
+        """
+        Filter tester reviews based on user role and workflow stage:
+        - Testers: see reviews for tasks awaiting tester testing (pending_tester status)
+        - Supervisors/Admin: see all reviews
+        """
+        user = self.request.user
+        
+        if user.role == 'tester':
+            # Testers see reviews for tasks that are pending_tester (awaiting their testing)
+            return TesterReview.objects.filter(
+                task__status='pending_tester'
+            ).select_related('task', 'tester')
+        elif user.role in ['supervisor', 'admin']:
+            # Supervisors and admins see all reviews
+            return TesterReview.objects.all().select_related('task', 'tester')
+        
+        return TesterReview.objects.none()
+    
+    def perform_create(self, serializer):
+        """
+        Saves the tester review and updates the Task status.
+        
+        Workflow:
+        - If accepted: task.status = 'pending_supervisor' (move to Supervisor for final review)
+        - If rejected: task.status = 'rejected' (task failed final testing)
+        """
+        decision = serializer.validated_data['decision']
+        task = serializer.validated_data.pop('task_id')
+        
+        with transaction.atomic():
+            # 1. Save the Tester Review record
+            tester_review = serializer.save(tester=self.request.user, task=task)
+            
+            # 2. Update Task status based on tester decision
+            if decision == 'accepted':
+                # Tester approved: move to supervisor for final review
+                task.status = 'pending_supervisor'
+                task.save(update_fields=['status', 'updated_at'])
+                
+                # Notify supervisors that this task passed testing and is ready for final review
+                supervisors = User.objects.filter(role='supervisor', is_active=True)
+                for supervisor in supervisors:
+                    create_notification(
+                        user_id=supervisor.id,
+                        type='task_ready_for_supervisor_review',
+                        message=f"Task #{task.id} passed tester inspection and is ready for your final review.",
+                        payload={
+                            'task_id': task.id,
+                            'job_order_code': task.job_order.order_code,
+                            'device_serial': task.device.serial_number
+                        }
+                    )
+            
+            elif decision == 'rejected':
+                # Tester rejected: task fails final testing
+                task.status = 'rejected'
+                task.device.current_status = 'rejected'
+                task.save(update_fields=['status', 'updated_at'])
+                task.device.save(update_fields=['current_status', 'last_updated'])
+                
+                # Notify technician of rejection
+                if task.technician:
+                    create_notification(
+                        user_id=task.technician.id,
+                        type='task_rejected',
+                        message=f"Task #{task.id} was rejected during tester inspection: {tester_review.comments[:50]}...",
+                        payload={
+                            'task_id': task.id,
+                            'job_order_code': task.job_order.order_code
+                        }
+                    )
+            
+            return tester_review
 
 class TechnicianMetricsView(APIView):
     """
@@ -606,7 +825,7 @@ class TechnicianMetricsView(APIView):
 
     def get_permissions(self):
         """Custom permissions - only planning engineers and supervisors can access"""
-        self.permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'supervisor', 'admin'])]
+        self.permission_classes = [IsAuthenticated, IsSupervisorOrPlanningOrAdmin]
         return [permission() for permission in self.permission_classes]
 
     def get(self, request, id, format=None):
@@ -668,7 +887,7 @@ class JobOrderMetricsView(APIView):
 
     def get_permissions(self):
         """Custom permissions - only planning engineers and supervisors can access"""
-        self.permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'supervisor', 'admin'])]
+        self.permission_classes = [IsAuthenticated, IsSupervisorOrPlanningOrAdmin]
         return [permission() for permission in self.permission_classes]
 
     def get(self, request, id, format=None):
@@ -735,7 +954,7 @@ class PlannerStatisticsView(APIView):
     - overdue_tasks: Count of tasks past their due date
     - pending_reviews: Count of tasks awaiting supervisor review
     """
-    permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'admin'])]
+    permission_classes = [IsAuthenticated, IsPlanningOrAdmin]
 
     def get(self, request, format=None):
         """
@@ -746,14 +965,14 @@ class PlannerStatisticsView(APIView):
         today = timezone.now().date()
         week_from_now = today + datetime.timedelta(days=7)
         
-        # 1. Active Job Orders (status='in_progress')
-        active_job_orders = JobOrder.objects.filter(status='in_progress').count()
+        # 1. Active Job Orders (status in progress or available for work)
+        active_job_orders = JobOrder.objects.filter(status__in=['available', 'in_progress']).count()
         
         # 2. Job Orders due this week
         due_this_week = JobOrder.objects.filter(
             due_date__gte=today,
             due_date__lte=week_from_now,
-            status__in=['in_progress', 'pending']
+            status__in=['available', 'in_progress']
         ).count()
         
         # 3. Average Productivity (today's tasks)
@@ -785,14 +1004,14 @@ class PlannerStatisticsView(APIView):
         # 6. Technician Utilization
         technician_utilization = (active_technicians / total_technicians * 100) if total_technicians > 0 else 0
         
-        # 7. Overdue Tasks
+        # 7. Overdue Tasks (tasks on job orders past due date)
         overdue_tasks = Task.objects.filter(
             status__in=['available', 'in_progress'],
-            due_date__lt=today
+            job_order__due_date__lt=today
         ).count()
         
-        # 8. Pending Reviews (tasks awaiting supervisor review)
-        pending_reviews = Task.objects.filter(status='pending_supervisor').count()
+        # 8. Pending Reviews (tasks awaiting approval)
+        pending_reviews = Task.objects.filter(status='pending-approval').count()
         
         # Prepare response
         statistics = {
@@ -819,7 +1038,7 @@ class ExcelImportView(APIView):
     Endpoint: POST /api/v1/data/import/job-order/
     Role Access: Planning Engineer only
     """
-    permission_classes = [IsAuthenticated, IsRoleRequired(['planning', 'admin'])]
+    permission_classes = [IsAuthenticated, IsPlanningOrAdmin]
     
     def post(self, request, format=None):
         """
@@ -969,8 +1188,9 @@ class DailyReportExportView(APIView):
         
         # 2. Query completed tasks for the requested date
         # Filter tasks that were completed on the target date (using updated_at as completion date)
+        # Valid statuses: 'available', 'in_progress', 'pending-approval', 'approved', 'rejected', 'done'
         tasks = Task.objects.filter(
-            status__in=['done', 'pending_supervisor', 'completed'],
+            status__in=['done', 'approved', 'rejected'],
             updated_at__date=target_date
         ).select_related('job_order', 'device', 'technician')
         

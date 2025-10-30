@@ -39,11 +39,9 @@ export const TaskInspectionPanel: React.FC<TaskInspectionPanelProps> = ({ tasks,
 
   // Filter tasks ready for QA inspection
   const inspectableTasks = useMemo(() => {
-    // Tasks that are done but not yet inspected
+    // Tasks that are pending QA approval
     return tasks.filter(t => 
-      t.status === 'done' || 
-      t.status === 'pending_qa' ||
-      t.status === 'pending_supervisor'
+      t.status === 'pending_qa'
     );
   }, [tasks]);
 
@@ -307,9 +305,9 @@ export const TaskInspectionPanel: React.FC<TaskInspectionPanelProps> = ({ tasks,
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          task.status === 'done' ? 'bg-blue-100 text-blue-800' :
                           task.status === 'pending_qa' ? 'bg-yellow-100 text-yellow-800' :
-                          task.status === 'pending_supervisor' ? 'bg-purple-100 text-purple-800' :
+                          task.status === 'qa_approved' ? 'bg-green-100 text-green-800' :
+                          task.status === 'rejected' ? 'bg-red-100 text-red-800' :
                           'bg-gray-100 text-gray-800'
                         }`}>
                           {task.status}

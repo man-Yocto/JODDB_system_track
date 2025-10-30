@@ -113,7 +113,7 @@ export const TaskSelectionDialog: React.FC<TaskSelectionDialogProps> = ({
       title={`Select a Task for Job: ${jobTitle}`} 
       isOpen={isOpen} 
       onClose={onClose} 
-      className="!max-w-5xl"
+      className="max-w-5xl!"
     >
       <div className="space-y-4">
         {/* Search and Filters Row */}

@@ -4,26 +4,18 @@ from rest_framework import permissions
 
 class IsRoleRequired(permissions.BasePermission):
     """
-    Custom DRF permission class for role-based access control.
+    Base class for role-based access control.
     
-    Usage in ViewSet:
-        permission_classes = [IsRoleRequired(['planning', 'admin'])]
+    To use with specific roles, create subclasses or override allowed_roles.
+    Default allows all authenticated users. Subclasses should set allowed_roles.
     
-    Or dynamically:
-        def get_permissions(self):
-            if self.action == 'create':
-                return [IsRoleRequired(['planning'])]
-            return [IsRoleRequired(['planning', 'supervisor', 'quality', 'technician'])]
+    Example subclass:
+        class IsPlanningEngineer(IsRoleRequired):
+            allowed_roles = ['planning', 'admin']
     """
     
-    def __init__(self, allowed_roles=None):
-        """
-        Initialize with a list of allowed roles.
-        
-        Args:
-            allowed_roles (list): List of role strings that are allowed access
-        """
-        self.allowed_roles = allowed_roles or []
+    # Override this in subclasses to specify allowed roles
+    allowed_roles = []
     
     def has_permission(self, request, view):
         """
@@ -37,6 +29,10 @@ class IsRoleRequired(permissions.BasePermission):
         if request.user.is_superuser:
             return True
         
+        # If no specific roles required, allow all authenticated users
+        if not self.allowed_roles:
+            return True
+        
         # Check if user's role is in allowed roles
         user_role = getattr(request.user, 'role', None)
         
@@ -44,43 +40,78 @@ class IsRoleRequired(permissions.BasePermission):
             return False
         
         return user_role in self.allowed_roles
-    
-    def __call__(self):
-        """
-        Allow the permission to be instantiated in permission_classes list.
-        """
-        return self
 
 
 # Convenience permission classes for common role combinations
 class IsPlanningEngineer(IsRoleRequired):
     """Only Planning Engineers can access"""
-    def __init__(self):
-        super().__init__(allowed_roles=['planning', 'admin'])
+    allowed_roles = ['planning', 'admin']
 
 
 class IsTechnician(IsRoleRequired):
     """Only Technicians can access"""
-    def __init__(self):
-        super().__init__(allowed_roles=['technician', 'admin'])
+    allowed_roles = ['technician', 'admin']
 
 
 class IsQualityInspector(IsRoleRequired):
     """Only Quality Inspectors can access"""
-    def __init__(self):
-        super().__init__(allowed_roles=['quality', 'admin'])
+    allowed_roles = ['quality', 'admin']
 
 
 class IsSupervisor(IsRoleRequired):
     """Only Supervisors can access"""
-    def __init__(self):
-        super().__init__(allowed_roles=['supervisor', 'admin'])
+    allowed_roles = ['supervisor', 'admin']
 
 
 class IsAdmin(IsRoleRequired):
     """Only System Admins can access"""
-    def __init__(self):
-        super().__init__(allowed_roles=['admin'])
+    allowed_roles = ['admin']
+
+
+class IsTechnicianOrAll(IsRoleRequired):
+    """Technicians, Testers, Admins, Planning, Supervisors, Quality can access"""
+    allowed_roles = ['technician', 'tester', 'admin', 'planning', 'supervisor', 'quality']
+
+
+class IsQualityOrTesterOrAdmin(IsRoleRequired):
+    """Quality Inspectors, Testers, and Admins can access"""
+    allowed_roles = ['quality', 'tester', 'admin']
+
+
+class IsPlanningOrAdminOrSupervisorOrQuality(IsRoleRequired):
+    """Planning, Admin, Supervisor, Quality can access"""
+    allowed_roles = ['admin', 'planning', 'supervisor', 'quality']
+
+
+class IsPlanningOrAdmin(IsRoleRequired):
+    """Planning Engineers and Admins can access"""
+    allowed_roles = ['planning', 'admin']
+
+
+class IsSupervisorOrAdmin(IsRoleRequired):
+    """Supervisors and Admins can access"""
+    allowed_roles = ['supervisor', 'admin']
+
+
+class IsSupervisorOrPlanningOrAdmin(IsRoleRequired):
+    """Supervisors, Planning Engineers, and Admins can access"""
+    allowed_roles = ['supervisor', 'planning', 'admin']
+
+
+class IsTesterOrAdmin(IsRoleRequired):
+    """Testers and Admins can access"""
+    allowed_roles = ['tester', 'admin']
+
+
+class IsTesterOrSupervisorOrAdmin(IsRoleRequired):
+    """Testers, Supervisors, and Admins can access"""
+    allowed_roles = ['tester', 'supervisor', 'admin']
+
+
+class IsQualityOrTesterOrSupervisorOrAdmin(IsRoleRequired):
+    """Quality Inspectors, Testers, Supervisors, and Admins can access"""
+    allowed_roles = ['quality', 'tester', 'supervisor', 'admin']
+
 
 
 class IsStaffOrReadOnly(permissions.BasePermission):

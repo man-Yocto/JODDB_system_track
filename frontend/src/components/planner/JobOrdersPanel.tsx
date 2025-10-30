@@ -9,7 +9,7 @@ interface JobOrdersPanelProps {
 }
 
 export const JobOrdersPanel: React.FC<JobOrdersPanelProps> = ({ jobs, onJobClick, loading = false }) => {
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'overdue'>('all');
+  const [filter] = useState<'all' | 'active' | 'completed' | 'overdue'>('all');
 
   const filteredJobs = filter === 'all' ? jobs : jobs.filter(job => job.status === filter);
 

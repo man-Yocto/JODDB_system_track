@@ -8,7 +8,7 @@ interface ReviewDrawerProps {
   type: 'task' | 'device';
 }
 
-export const ReviewDrawer: React.FC<ReviewDrawerProps> = ({ isOpen, onClose, submissionId, type }) => {
+export const ReviewDrawer: React.FC<ReviewDrawerProps> = ({ isOpen, onClose, submissionId, type: _type }) => {
   const [reviewType, setReviewType] = useState<'performance' | 'quality' | 'delay' | 'general'>('general');
   const [note, setNote] = useState('');
   const [flagForQA, setFlagForQA] = useState(false);

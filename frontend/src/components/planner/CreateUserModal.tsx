@@ -41,12 +41,13 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
 
     try {
       // Map role to backend value
-      const roleMap: { [key in UserRole]: string } = {
+      const roleMap: { [key: string]: string } = {
         'technician': 'technician',
         'supervisor': 'supervisor',
-        'planner': 'planner',
+        'planning': 'planning',
         'quality': 'quality',
         'test_technician': 'test_technician',
+        'tester': 'tester',
       };
 
       await api.users.createUser({

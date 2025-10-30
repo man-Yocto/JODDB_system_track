@@ -54,7 +54,7 @@ export const mockPlannerUsers: PlannerUser[] = [
     fullName: 'Ahmed Ali',
     username: 'ahmed.ali',
     email: 'ahmed.ali@company.com',
-    role: 'user',
+    role: 'technician',
     assignedJobOrders: 2,
     isActive: true
   },
@@ -63,7 +63,7 @@ export const mockPlannerUsers: PlannerUser[] = [
     fullName: 'Sara Hassan',
     username: 'sara.hassan',
     email: 'sara.hassan@company.com',
-    role: 'user',
+    role: 'technician',
     assignedJobOrders: 3,
     isActive: true
   },

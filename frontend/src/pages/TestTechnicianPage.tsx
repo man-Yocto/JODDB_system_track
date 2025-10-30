@@ -37,7 +37,7 @@ export const TestTechnicianPage: React.FC = () => {
         onLogout={handleLogout} 
       />
       <main className="container mx-auto py-6 px-4">
-        <div className="mb-6 bg-gradient-to-r from-purple-500 to-indigo-600 text-white p-4 rounded-lg shadow-lg">
+        <div className="mb-6 bg-linear-to-r from-purple-500 to-indigo-600 text-white p-4 rounded-lg shadow-lg">
           <h1 className="text-2xl font-bold">Test Technician Dashboard</h1>
           <p className="text-purple-100 mt-1">Quality testing and verification interface</p>
         </div>

@@ -62,7 +62,7 @@ class User(AbstractUser):
     """
     ROLE_CHOICES = [
         ('technician', 'Technician'),
-        ('quality_inspector', 'Quality Inspector'),
+        ('quality', 'Quality Inspector'),
         ('supervisor', 'Supervisor'),
         ('planning', 'Planning Engineer'),
         ('admin', 'System Admin'),
@@ -189,10 +189,15 @@ class Task(models.Model):
     STATUS_CHOICES = [
         ('available', 'Available'),
         ('in_progress', 'In Progress'),
-        ('pending-approval', 'Pending Approval'),  # ← Technician finished, waiting for planner approval
-        ('approved', 'Approved'),  # ← Planner approved
-        ('rejected', 'Rejected'),  # ← Planner rejected
-        ('done', 'Done'),  # ← Final completed status
+        ('done', 'Done'),  # ← Technician completed the task
+        ('pending_qa', 'Pending QA'),  # ← Waiting for QA Inspector approval
+        ('qa_approved', 'QA Approved'),  # ← QA Inspector approved, ready for Tester
+        ('pending_tester', 'Pending Tester'),  # ← Waiting for Tester final testing
+        ('tester_approved', 'Tester Approved'),  # ← Tester approved, ready for Supervisor
+        ('pending_supervisor', 'Pending Supervisor'),  # ← Waiting for Supervisor review
+        ('supervisor_approved', 'Supervisor Approved'),  # ← Supervisor approved, task complete
+        ('rejected', 'Rejected'),  # ← Rejected at any stage, goes back to technician
+        ('completed', 'Completed'),  # ← Final completed status
     ]
     
     TASK_TYPE_CHOICES = [
@@ -424,6 +429,42 @@ class SupervisorReview(models.Model):
         return f"Review {self.id} - {self.decision} (Inspection {self.inspection.id})"
 
 
+class TesterReview(models.Model):
+    """
+    Final tester approval of completed tasks.
+    This is the last stage in the task workflow.
+    """
+    DECISION_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+    ]
+    
+    task = models.ForeignKey(
+        Task,
+        on_delete=models.CASCADE,
+        related_name='tester_reviews'
+    )
+    tester = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='tester_reviews'
+    )
+    decision = models.CharField(max_length=20, choices=DECISION_CHOICES, default='pending')
+    comments = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'tester_reviews'
+        ordering = ['-created_at']
+        verbose_name = 'Tester Review'
+        verbose_name_plural = 'Tester Reviews'
+    
+    def __str__(self):
+        return f"Tester Review {self.id} - {self.decision} (Task {self.task.id})"
+
+
 class PerformanceMetric(models.Model):
     """
     Computed performance metrics per technician per day/job order.
@@ -468,6 +509,9 @@ class Notification(models.Model):
         ('quality_issue', 'Quality Issue Alert'),
         ('efficiency_alert', 'Efficiency Alert'),
         ('report_submitted', 'Report Submitted'),
+        ('task_ready_for_inspection', 'Task Ready for Inspection'),
+        ('task_ready_for_testing', 'Task Ready for Testing'),
+        ('task_completed', 'Task Completed'),
     ]
     
     user = models.ForeignKey(

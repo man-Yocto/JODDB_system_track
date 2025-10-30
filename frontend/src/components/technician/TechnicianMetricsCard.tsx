@@ -61,10 +61,10 @@ export const TechnicianMetricsCard: React.FC<TechnicianMetricsCardProps> = ({ te
   };
 
   // Calculate derived metrics from API response
-  const efficiencyPercent = metrics.efficiency || 0;
-  const tasksCompleted = metrics.total_tasks_completed || 0;
-  const productivityPercent = metrics.productivity || 0;
-  const utilizationPercent = metrics.utilization || 0;
+  const efficiencyPercent = (metrics as any).efficiency || 0;
+  const tasksCompleted = (metrics as any).tasks_completed || 0;
+  const productivityPercent = (metrics as any).productivity || 0;
+  const utilizationPercent = (metrics as any).utilization || 0;
 
   return (
     <div className="bg-gradient-to-br from-white to-blue-50 rounded-lg shadow-lg border-2 border-blue-100 overflow-hidden">

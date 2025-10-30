@@ -30,13 +30,20 @@ export const JobOrdersSummary: React.FC<JobOrdersSummaryProps> = ({ onJobClick }
               const progress = await api.metrics.getJobOrderProgress(job.id);
               // Get unique technicians for this job (from tasks)
               const tasks = await api.tasks.getTasks();
-              const jobTasks = tasks.filter(t => t.job_order === job.id);
-              const technicianIds = [...new Set(jobTasks.map(t => t.technician).filter(Boolean))];
+              // Filter tasks by comparing job_order_code with order_code
+              // API returns job_order_code (string) not job_order (ID)
+              const jobTasks = tasks.filter(t => (t as any).job_order_code === job.order_code);
+              // Extract unique technician usernames from tasks
+              const technicianUsernames = [...new Set(
+                jobTasks.map(t => (t as any).technician_username).filter(Boolean)
+              )];
+              
+              console.log(`📊 JobOrdersSummary - Job ${job.order_code}: found ${jobTasks.length} tasks with ${technicianUsernames.length} technicians`);
               
               return {
                 ...job,
                 progress,
-                assignedTechnicians: technicianIds as number[],
+                assignedTechnicians: technicianUsernames as any,
               };
             } catch (error) {
               console.error(`Error fetching progress for job ${job.id}:`, error);

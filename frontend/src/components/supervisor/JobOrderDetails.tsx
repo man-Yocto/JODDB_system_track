@@ -18,7 +18,6 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
   const [jobOrder, setJobOrder] = useState<JobOrder | null>(null);
   const [tasks, setTasks] = useState<EnrichedTask[]>([]);
   const [progress, setProgress] = useState<JobOrderProgress | null>(null);
-  const [users, setUsers] = useState<any[]>([]);
   const [exportingPDF, setExportingPDF] = useState(false);
 
   useEffect(() => {
@@ -70,17 +69,27 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
       
       setJobOrder(job);
       setProgress(progressData);
-      setUsers(allUsers);
       
       // Filter tasks for this job order
-      const jobTasks = allTasks.filter((t: Task) => t.job_order === parseInt(jobId!));
+      // Note: API returns job_order_code (string like "JO-01112"), not job_order (ID)
+      // Compare using order_code which should match job_order_code
+      console.log('🏢 JobOrderDetails - Job order code:', job.order_code);
+      const jobTasks = allTasks.filter((t: Task) => {
+        const taskJobCode = (t as any).job_order_code;
+        const matches = taskJobCode === job.order_code;
+        return matches;
+      });
+      console.log('🏢 JobOrderDetails - Filtered tasks count:', jobTasks.length, 'from total:', allTasks.length);
       
       // Create inspection map by task ID
       const inspectionMap = new Map(inspections.map(insp => [insp.task, insp]));
       
       // Enrich tasks with technician names and QA inspection status
       const enrichedTasks: EnrichedTask[] = jobTasks.map(task => {
-        const tech = allUsers.find(u => u.id === task.technician);
+        // API returns technician_username directly, so use that
+        const techUsername = (task as any).technician_username;
+        // Try to find full name from users list if we have technician ID, but fallback to username
+        const tech = task.technician ? allUsers.find(u => u.id === task.technician) : null;
         const inspection = inspectionMap.get(task.id);
         
         // Determine QA status
@@ -93,7 +102,8 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
         
         return {
           ...task,
-          technician_username: tech ? (tech.full_name || tech.username) : 'Unassigned',
+          // Use full name if available, otherwise use username from API
+          technician_username: tech ? (tech.full_name || tech.username) : (techUsername || 'Unassigned'),
           qa_inspection: inspection,
           qa_status,
         };
@@ -139,11 +149,12 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
   const totalTasks = tasks.length;
   
   // Get unique technicians assigned to this job
-  const assignedTechnicians = [...new Set(tasks.map(t => t.technician).filter(Boolean))];
-  const technicianNames = assignedTechnicians.map(techId => {
-    const user = users.find(u => u.id === techId);
-    return user ? (user.full_name || user.username) : `Tech ${techId}`;
-  });
+  // Use technician_username from enriched tasks since API doesn't return technician ID
+  const technicianNames = [...new Set(
+    tasks
+      .map((t: EnrichedTask) => t.technician_username)
+      .filter(Boolean)
+  )] as string[];
 
   return (
     <div className="space-y-6">
@@ -213,7 +224,7 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
         </div>
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-sm text-gray-600">Technicians</div>
-          <div className="text-lg font-medium text-gray-800">{assignedTechnicians.length}</div>
+          <div className="text-lg font-medium text-gray-800">{technicianNames.length}</div>
           <div className="text-xs text-gray-500 mt-1 truncate" title={technicianNames.join(', ')}>
             {technicianNames.slice(0, 2).join(', ')}
             {technicianNames.length > 2 && ` +${technicianNames.length - 2}`}
@@ -237,7 +248,6 @@ export const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobId, onBack 
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Technician</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Efficiency</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Task Status</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">QA Status</th>
                 </tr>
               </thead>
               <tbody>

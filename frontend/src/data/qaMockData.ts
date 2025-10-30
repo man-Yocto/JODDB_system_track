@@ -5,52 +5,25 @@ export const mockQATasks: QATask[] = [
     id: 'T001',
     deviceSerial: 'SN-10001',
     jobOrderCode: 'RADAR-DIAG-001',
-    jobOrderId: 'JO-001',
-    technicianId: 'U001',
     technicianName: 'Ahmed Ali',
     operationName: 'System Diagnostics',
-    standardTime: 9000, // 2.5 hours
-    actualTime: 8100, // 2.25 hours
-    startTime: '2024-03-08 09:00',
-    endTime: '2024-03-08 11:15',
     status: 'pending_qa',
-    technicianNotes: 'All diagnostics completed successfully. Minor calibration adjustment made to sensor array.',
-    efficiency: 111,
-    submittedAt: '2024-03-08 11:20'
   },
   {
     id: 'T002',
     deviceSerial: 'SN-10002',
     jobOrderCode: 'RADAR-DIAG-001',
-    jobOrderId: 'JO-001',
-    technicianId: 'U002',
     technicianName: 'Sara Hassan',
     operationName: 'System Diagnostics',
-    standardTime: 9000,
-    actualTime: 10800, // 3 hours - overtime
-    startTime: '2024-03-08 08:00',
-    endTime: '2024-03-08 11:00',
     status: 'pending_qa',
-    technicianNotes: 'Encountered firmware compatibility issue. Required additional troubleshooting. Issue resolved.',
-    efficiency: 83,
-    submittedAt: '2024-03-08 11:10'
   },
   {
     id: 'T003',
     deviceSerial: 'SN-20001',
     jobOrderCode: 'FW-UPDATE-002',
-    jobOrderId: 'JO-002',
-    technicianId: 'U003',
     technicianName: 'Mohammed Ibrahim',
     operationName: 'Firmware Update',
-    standardTime: 5400, // 1.5 hours
-    actualTime: 5100,
-    startTime: '2024-03-08 13:00',
-    endTime: '2024-03-08 14:25',
     status: 'done',
-    technicianNotes: 'Update completed without issues. All post-update tests passed.',
-    efficiency: 106,
-    submittedAt: '2024-03-08 14:30'
   },
 ];
 

@@ -152,7 +152,7 @@ export const SettingsPage: React.FC = () => {
                       {['small', 'medium', 'large'].map((size) => (
                         <button
                           key={size}
-                          onClick={() => setFormData(prev => ({ ...prev, fontSize: size }))}
+                          onClick={() => setFormData((prev: typeof formData) => ({ ...prev, fontSize: size }))}
                           className={`flex-1 px-4 py-3 rounded-lg border-2 transition ${
                             formData.fontSize === size
                               ? 'border-blue-600 bg-blue-50 text-blue-700 font-medium'
@@ -200,19 +200,6 @@ export const SettingsPage: React.FC = () => {
                   </div>
 
                   <div className="space-y-4">
-                    <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition">
-                      <input
-                        type="checkbox"
-                        name="notificationsEmail"
-                        checked={formData.notificationsEmail}
-                        onChange={handleInputChange}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <div>
-                        <p className="font-medium text-gray-800">Email Notifications</p>
-                        <p className="text-sm text-gray-600">Receive notifications via email</p>
-                      </div>
-                    </label>
 
                     <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition">
                       <input

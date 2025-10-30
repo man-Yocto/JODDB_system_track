@@ -63,7 +63,7 @@ export const TesterDashboard: React.FC = () => {
     comments: string
   ) => {
     try {
-      await api.inspections.createInspection({
+      await api.testerReviews.createReview({
         task_id: taskId,
         decision,
         comments,

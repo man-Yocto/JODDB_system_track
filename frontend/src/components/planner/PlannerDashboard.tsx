@@ -151,13 +151,13 @@ export const PlannerDashboard: React.FC = () => {
         return (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-800">Task Review & Approval</h2>
+              <h2 className="text-2xl font-bold text-gray-800">Supervisor Task Review Queue</h2>
               <div className="text-sm text-gray-600">
-                {tasks.filter(t => t.status === 'pending_supervisor').length} pending reviews
+                {tasks.filter(t => t.status === 'qa_approved').length} tasks awaiting review
               </div>
             </div>
             <TaskReviewQueue
-              tasks={tasks.filter(t => t.status === 'pending_supervisor') as unknown as PlannerTask[]}
+              tasks={tasks.filter(t => t.status === 'qa_approved') as unknown as PlannerTask[]}
               onApprove={handleApproveTask}
               onReject={handleRejectTask}
             />
@@ -191,7 +191,7 @@ export const PlannerDashboard: React.FC = () => {
     }
   };
 
-  const pendingTasksCount = tasks.filter(t => t.status === 'pending_supervisor').length;
+  const pendingTasksCount = tasks.filter(t => t.status === 'qa_approved').length;
 
   return (
     <div className="h-full flex flex-col bg-gray-50">

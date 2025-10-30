@@ -78,8 +78,9 @@ export interface LoginResponse {
 
 export interface Task {
   id: number;
-  job_order: number;
-  device: number;
+  job_order?: number;  // Optional - may not be in API response
+  job_order_code?: string;  // Added - what API actually returns
+  device?: number;
   device_serial?: string;
   operation_name: string;
   standard_time_seconds: number;
@@ -87,9 +88,11 @@ export interface Task {
   efficiency?: number;
   status: string;
   technician?: number;
+  technician_username?: string;
   technician_name?: string;
   start_time?: string;
   end_time?: string;
+  task_type?: string;
   created_at: string;
   updated_at: string;
 }
@@ -181,6 +184,15 @@ export interface SupervisorReview {
   id: number;
   inspection: number;
   supervisor: number | null;
+  decision: 'accepted' | 'rejected';
+  comments: string;
+  created_at: string;
+}
+
+export interface TesterReview {
+  id: number;
+  task: number;
+  tester: number | null;
   decision: 'accepted' | 'rejected';
   comments: string;
   created_at: string;
@@ -474,6 +486,43 @@ export const inspectionAPI = {
     const response = await axiosInstance.get('/api/v1/inspections/');
     return handlePaginatedResponse<Inspection>(response);
   },
+
+  /**
+   * Get inspection for a specific task
+   * GET /api/v1/inspections/task/<task_id>/
+   */
+  getInspectionForTask: async (taskId: number): Promise<Inspection> => {
+    const response = await axiosInstance.get(`/api/v1/inspections/task/${taskId}/`);
+    return handleResponse<Inspection>(response);
+  },
+};
+
+// =======================
+// Tester Review APIs (Tester)
+// =======================
+
+export const testerReviewAPI = {
+  /**
+   * Create tester review (accept/reject task during testing)
+   * POST /api/v1/tester-reviews/
+   */
+  createReview: async (data: {
+    task_id: number;
+    decision: 'accepted' | 'rejected';
+    comments: string;
+  }): Promise<TesterReview> => {
+    const response = await axiosInstance.post('/api/v1/tester-reviews/', data);
+    return handleResponse<TesterReview>(response);
+  },
+
+  /**
+   * Get all tester reviews
+   * GET /api/v1/tester-reviews/
+   */
+  getReviews: async (): Promise<TesterReview[]> => {
+    const response = await axiosInstance.get('/api/v1/tester-reviews/');
+    return handlePaginatedResponse<TesterReview>(response);
+  },
 };
 
 // =======================
@@ -742,6 +791,7 @@ export const api = {
   users: userAPI,
   metrics: metricsAPI,
   inspections: inspectionAPI,
+  testerReviews: testerReviewAPI,
   supervisorReviews: supervisorReviewAPI,
   export: exportAPI,
   taskSummary: taskSummaryAPI,

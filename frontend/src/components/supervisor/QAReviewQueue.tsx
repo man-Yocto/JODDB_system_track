@@ -48,7 +48,7 @@ export const QAReviewQueue: React.FC = () => {
       // Enrich inspections with related data
       const enriched: EnrichedInspection[] = inspectionsData.map(inspection => {
         const task = taskMap.get(inspection.task);
-        const jobOrder = task ? jobOrderMap.get(task.job_order) : undefined;
+        const jobOrder = task && task.job_order ? jobOrderMap.get(task.job_order) : undefined;
         const inspector = inspection.inspector ? userMap.get(inspection.inspector) : undefined;
         const technician = task?.technician ? userMap.get(task.technician) : undefined;
         const supervisorReview = reviewMap.get(inspection.id);

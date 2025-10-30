@@ -38,8 +38,10 @@ from core.views import (
     DailyReportExportView,
     InspectionViewSet,
     SupervisorReviewViewSet,
+    TesterReviewViewSet,
     TaskStatusSummaryView,
     JobOrderPDFExportView,  # NEW: PDF export
+    get_inspection_for_task,  # Endpoint to fetch inspection for supervisor review
 )
 
 
@@ -52,10 +54,14 @@ router.register(r'tasks', TechnicianTaskViewSet, basename='task')
 router.register(r'users', UserManagementViewSet, basename='user-management')
 router.register(r'inspections', InspectionViewSet, basename='inspection')
 router.register(r'supervisor-reviews', SupervisorReviewViewSet, basename='supervisor-review')
+router.register(r'tester-reviews', TesterReviewViewSet, basename='tester-review')
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # Get inspection for supervisor review
+    path('api/v1/inspections/task/<int:task_id>/', get_inspection_for_task, name='get-inspection-for-task'),
     
     # --- API Authentication Endpoints ---
     path('api/v1/auth/register/', UserRegistrationView.as_view(), name='register'),

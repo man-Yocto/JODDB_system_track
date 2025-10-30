@@ -5,7 +5,7 @@ from core.notifications.utils import create_notification
 from django.db import transaction
 from django.core.validators import MinValueValidator
 from rest_framework.exceptions import ValidationError
-from core.models import JobOrder, Device, Task , Inspection, SupervisorReview, Job, Process
+from core.models import JobOrder, Device, Task , Inspection, SupervisorReview, TesterReview, Job, Process
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from core.models import User, JobOrder, Device, Task
@@ -366,10 +366,10 @@ class InspectionSerializer(serializers.ModelSerializer):
         
         # Further validation: Task must be ready for QA
         task = data['task_id']
-        # Assumes the task status after 'end' action is 'done' (or 'pending_qa')
-        if task.status not in ['done', 'pending_qa']: 
-             raise ValidationError(
-                {"task_id": f"Task is not ready for inspection. Current status: {task.get_status_display()}."}
+        # Task must have status 'pending_qa' (waiting for QA Inspector)
+        if task.status != 'pending_qa':
+            raise ValidationError(
+                {"task_id": f"Task is not ready for QA inspection. Current status: {task.get_status_display()}."}
             )
 
         return data
@@ -381,11 +381,46 @@ class SupervisorReviewSerializer(serializers.ModelSerializer):
     """
     inspection_id = serializers.PrimaryKeyRelatedField(
         queryset=Inspection.objects.all(),
-        write_only=True
+        write_only=True,
+        source='inspection'
     )
     
     class Meta:
         model = SupervisorReview
         fields = ['id', 'inspection_id', 'decision', 'comments', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+
+class TesterReviewSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Tester to perform final testing and approval.
+    """
+    task_id = serializers.PrimaryKeyRelatedField(
+        queryset=Task.objects.all(),
+        write_only=True
+    )
+    
+    class Meta:
+        model = TesterReview
+        fields = ['id', 'task_id', 'decision', 'comments', 'created_at']
+        read_only_fields = ['id', 'created_at']
+    
+    def validate(self, data):
+        """
+        Validate that comments are provided for rejections.
+        """
+        if data['decision'] == 'rejected' and not data.get('comments'):
+            raise ValidationError(
+                {"comments": "Comments are mandatory when rejecting a task during testing."}
+            )
+        
+        # Task must be pending tester review
+        task = data['task_id']
+        if task.status != 'pending_tester':
+            raise ValidationError(
+                {"task_id": f"Task is not ready for tester review. Current status: {task.get_status_display()}."}
+            )
+        
+        return data
+
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogOut, ChevronDown, User, Settings, HelpCircle, Home } from 'lucide-react';
+import { LogOut, ChevronDown, User, Settings, Home } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -23,11 +23,6 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, user, onLogout 
   const handleSettings = () => {
     setShowUserMenu(false);
     navigate('/settings');
-  };
-
-  const handleHelp = () => {
-    setShowUserMenu(false);
-    alert('Help & Support\n\nFor assistance, please contact:\n📧 support@joddb.com\n📞 +962 123 456 789\n\nDocumentation: Available in Settings → Help');
   };
 
   // Enhanced: Clickable logo navigates to role-specific home
@@ -100,13 +95,6 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, user, onLogout 
                   >
                     <Settings className="w-4 h-4" />
                     <span>Settings</span>
-                  </button>
-                  <button
-                    onClick={handleHelp}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <HelpCircle className="w-4 h-4" />
-                    <span>Help & Support</span>
                   </button>
                   <div className="border-t border-gray-200 my-1" />
                   <button

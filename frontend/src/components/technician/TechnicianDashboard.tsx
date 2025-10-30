@@ -10,15 +10,15 @@ export const TechnicianDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'available' | 'in_progress' | 'pending-approval'>('all');
+  const [filter, setFilter] = useState<'all' | 'available' | 'in_progress'>('all');
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const [isSelectAllMode, setIsSelectAllMode] = useState(false);
   const [showDailyReport, setShowDailyReport] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const activeTask = tasks.find(t => t.status === 'in_progress');
+  const inProgressTasks = tasks.filter(t => t.status === 'in_progress');
   const upcomingTasks = tasks.filter(t => t.status === 'available');
-  const completedTasks = tasks.filter(t => t.status === 'pending-approval' || t.status === 'approved' || t.status === 'done');
 
   const fetchTasks = useCallback(async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -166,8 +166,7 @@ export const TechnicianDashboard: React.FC = () => {
           {[
             { value: 'all', label: 'All', count: tasks.length },
             { value: 'available', label: 'Available', count: upcomingTasks.length },
-            { value: 'in_progress', label: 'In Progress', count: activeTask ? 1 : 0 },
-            { value: 'pending-approval', label: 'Completed', count: completedTasks.length },
+            { value: 'in_progress', label: 'In Progress', count: inProgressTasks.length },
           ].map(({ value, label, count }) => (
             <button
               key={value}
@@ -260,7 +259,7 @@ export const TechnicianDashboard: React.FC = () => {
           onClose={() => setShowDailyReport(false)}
           onSubmit={handleSubmitDailyReport}
           isSubmitting={reportSubmitting}
-          completedTasksCount={completedTasks.length}
+          completedTasksCount={0}
           allTasks={tasks}
         />
       )}

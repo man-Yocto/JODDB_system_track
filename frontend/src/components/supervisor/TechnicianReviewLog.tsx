@@ -28,7 +28,17 @@ export const TechnicianReviewLog: React.FC<TechnicianReviewLogProps> = ({ techni
       
       const user = allUsers.find((u: any) => u.id === parseInt(technicianId!));
       setTechnician(user);
-      setTasks(allTasks.filter((t: any) => t.technician === parseInt(technicianId!)));
+      
+      // Filter tasks by comparing technician_username from API
+      // API returns technician_username string, not technician ID
+      console.log('👤 TechnicianReviewLog - Looking for tasks for technician:', user?.username);
+      const technicianTasks = allTasks.filter((t: any) => {
+        const taskTechUsername = (t as any).technician_username;
+        const matches = taskTechUsername === user?.username;
+        return matches;
+      });
+      console.log('👤 TechnicianReviewLog - Found tasks count:', technicianTasks.length);
+      setTasks(technicianTasks);
     } catch (error) {
       console.error('Error fetching technician data:', error);
     } finally {

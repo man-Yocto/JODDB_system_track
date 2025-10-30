@@ -4,11 +4,14 @@ import { QAKPIs } from './QAKPIs';
 import { TaskInspectionPanel } from './TaskInspectionPanel';
 import { InspectionHistory } from './InspectionHistory';
 import { QAAnalytics } from './QAAnalytics';
+import { QualityInspectorPanel } from '../quality/QualityInspectorPanel';
+import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 
 type View = 'dashboard' | 'inspections' | 'history' | 'analytics';
 
 export const QADashboard: React.FC = () => {
+  const { user } = useAuth();
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [tasks, setTasks] = useState<any[]>([]);
   const [inspections, setInspections] = useState<any[]>([]);
@@ -64,6 +67,16 @@ export const QADashboard: React.FC = () => {
       );
     }
 
+    // Quality Inspector role gets enhanced interface with new components
+    if (user?.role === 'quality' && currentView === 'inspections') {
+      return (
+        <QualityInspectorPanel
+          tasks={tasks}
+          onInspectionComplete={() => fetchData()}
+        />
+      );
+    }
+
     switch (currentView) {
       case 'inspections':
         return (
@@ -92,29 +105,53 @@ export const QADashboard: React.FC = () => {
             </div>
 
             {/* Recent Inspections Preview */}
-            <div className="bg-white rounded-lg border">
-              <div className="px-6 py-4 border-b">
+            <div className="bg-white rounded-lg border flex flex-col max-h-96">
+              <div className="px-6 py-4 border-b shrink-0">
                 <h3 className="text-lg font-semibold text-gray-800">Recent Inspections</h3>
               </div>
-              <div className="p-4">
+              <div className="p-4 overflow-y-auto flex-1">
                 {inspections.length === 0 ? (
                   <div className="text-center text-gray-500 py-8">No inspections yet</div>
                 ) : (
-                  inspections.slice(0, 5).map((inspection: any) => (
-                    <div key={inspection.id} className="py-3 border-b last:border-0 flex justify-between items-center">
-                      <div>
-                        <div className="font-medium text-gray-800">Task #{inspection.task}</div>
-                        <div className="text-sm text-gray-600">
-                          {new Date(inspection.created_at).toLocaleString()}
+                  inspections.slice(0, 5).map((inspection: any) => {
+                    const task = tasks.find((t: any) => t.id === inspection.task);
+                    return (
+                      <div key={inspection.id} className="py-4 border-b last:border-0">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-800">
+                              Task #{inspection.task}{task ? ` - ${task.name || task.operation_name}` : ''}
+                            </div>
+                            {task && (
+                              <>
+                                <div className="text-sm text-gray-600 mt-1">
+                                  Device: {task.device_serial || `#${task.device}`}
+                                </div>
+                                {task.technician_name && (
+                                  <div className="text-sm text-gray-600">
+                                    Technician: {task.technician_name}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                            <div className="text-xs text-gray-500 mt-1">
+                              {new Date(inspection.created_at).toLocaleString()}
+                            </div>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ml-2 ${
+                            inspection.decision === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {inspection.decision}
+                          </span>
                         </div>
+                        {inspection.comments && (
+                          <div className="text-xs text-gray-500 italic mt-2 bg-gray-50 p-2 rounded">
+                            "{inspection.comments}"
+                          </div>
+                        )}
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        inspection.decision === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}>
-                        {inspection.decision}
-                      </span>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -124,7 +161,7 @@ export const QADashboard: React.FC = () => {
   };
 
   const pendingCount = tasks.filter((t: any) => 
-    t.status === 'pending_qa' || t.status === 'done' || t.status === 'pending_supervisor'
+    t.status === 'pending_qa'
   ).length;
 
   return (

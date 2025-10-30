@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { X, Save, AlertCircle } from 'lucide-react';
-import { api } from '../../services/api';
 import { type JobOrder } from '../../services/api';
 
 interface CreateTasksModalProps {
